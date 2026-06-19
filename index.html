@@ -1,0 +1,1493 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Симулятор ПМа: В поисках лимитов</title>
+  <style>
+    :root {
+      --bg: #05070d;
+      --panel: rgba(12, 15, 24, 0.9);
+      --panel-strong: #111827;
+      --card-text: #2b1807;
+      --text: #fff7de;
+      --muted: #cfc5aa;
+      --accent: #ffd56a;
+      --accent-2: #ff9e45;
+      --green: #66d17a;
+      --red: #f06060;
+      --blue: #67b7ff;
+      --shadow: rgba(0, 0, 0, 0.55);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #000;
+      color: var(--text);
+      font-family: "Trebuchet MS", Arial, sans-serif;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .game-shell {
+      position: relative;
+      width: 1400px;
+      height: 720px;
+      overflow: hidden;
+      background: var(--bg);
+      border: 4px solid #e9c36b;
+      box-shadow: 0 0 0 6px #2c1b0b, 0 18px 54px rgba(0, 0, 0, 0.7);
+    }
+
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: none;
+      background-position: center;
+      background-size: cover;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .start-screen {
+      background-image:
+        linear-gradient(90deg, rgba(5, 7, 13, 0.78), rgba(5, 7, 13, 0.22)),
+        url("images/bg_office_morning.png");
+    }
+
+    .game-screen {
+      background-image:
+        linear-gradient(rgba(5, 7, 13, 0.16), rgba(5, 7, 13, 0.34)),
+        url("./images/bg_backlog_battle.png");
+    }
+
+    .game-over-screen {
+      background-image: url("./images/screen_gameover_0.png");
+      background-color: #030407;
+      background-repeat: no-repeat;
+      background-size: contain;
+    }
+
+    .end-screen {
+      background-color: #030407;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: contain;
+    }
+
+    .start-panel,
+    .game-over-panel {
+      position: absolute;
+      left: 58px;
+      bottom: 54px;
+      width: 520px;
+      padding: 28px;
+      background: var(--panel);
+      border: 3px solid var(--accent);
+      box-shadow: 8px 8px 0 #030407;
+    }
+
+    .game-over-panel {
+      left: 50%;
+      top: 50%;
+      bottom: auto;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    h1,
+    h2,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 14px;
+      font-size: 38px;
+      line-height: 1.06;
+      text-shadow: 3px 3px 0 #000;
+    }
+
+    h2 {
+      margin-bottom: 12px;
+      font-size: 27px;
+      text-shadow: 2px 2px 0 #000;
+    }
+
+    p {
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.35;
+    }
+
+    .retro-button {
+      min-height: 42px;
+      padding: 10px 18px;
+      color: #241302;
+      cursor: pointer;
+      background: linear-gradient(#fff1a3, #ffb746);
+      border: 0;
+      border-right: 5px solid #8a4e17;
+      border-bottom: 5px solid #8a4e17;
+      box-shadow: 4px 4px 0 var(--shadow);
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .retro-button:hover {
+      filter: brightness(1.06);
+    }
+
+    .retro-button:active {
+      transform: translate(3px, 3px);
+      border-right-width: 2px;
+      border-bottom-width: 2px;
+      box-shadow: 1px 1px 0 var(--shadow);
+    }
+
+    .retro-button:disabled {
+      color: #ddd6c8;
+      cursor: default;
+      background: linear-gradient(#626a7e, #343b50);
+      border-right-color: #1c2231;
+      border-bottom-color: #1c2231;
+      filter: none;
+    }
+
+    .hud {
+      position: absolute;
+      z-index: 3;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      padding: 10px;
+      background: rgba(4, 6, 12, 0.72);
+      border: 2px solid rgba(255, 213, 106, 0.75);
+      box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.35);
+    }
+
+    .meter-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 5px;
+      font-size: 14px;
+      font-weight: 900;
+      text-shadow: 2px 2px 0 #000;
+    }
+
+    .meter-track {
+      height: 17px;
+      padding: 3px;
+      background: #05070d;
+      border: 2px solid #303849;
+    }
+
+    .meter-fill {
+      width: 50%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--red), var(--accent), var(--green));
+      transition: width 160ms ease;
+    }
+
+    .game-screen.active {
+      display: grid;
+      grid-template-rows: 76px 1fr;
+      gap: 10px;
+      padding: 12px;
+      background: var(--bg);
+    }
+
+    .hud {
+      position: relative;
+      z-index: 3;
+      top: auto;
+      left: auto;
+      right: auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      padding: 10px;
+      background: rgba(4, 6, 12, 0.82);
+      border: 2px solid rgba(255, 213, 106, 0.75);
+      box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.35);
+    }
+
+    .game-layout {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 30% 45% 25%;
+      gap: 10px;
+    }
+
+    .game-screen.final-mode,
+    .game-screen.analysis-mode {
+      grid-template-rows: 1fr;
+      gap: 0;
+      padding: 0;
+    }
+
+    .game-screen.final-mode .hud,
+    .game-screen.analysis-mode .hud,
+    .game-screen.final-mode .backlog-panel,
+    .game-screen.analysis-mode .backlog-panel,
+    .game-screen.final-mode .manager-panel {
+      display: none;
+    }
+
+    .game-screen.final-mode .game-layout {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+
+    .game-screen.analysis-mode .game-layout {
+      grid-template-columns: 75% 25%;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .game-screen.final-mode .scene-panel,
+    .game-screen.analysis-mode .scene-panel {
+      display: block;
+      border: 0;
+      box-shadow: none;
+      background: #030407;
+    }
+
+    .game-screen.analysis-mode .manager-panel {
+      display: grid;
+      background: #030407;
+    }
+
+    .game-screen.final-mode .scene-panel .column-title,
+    .game-screen.analysis-mode .scene-panel .column-title {
+      display: none;
+    }
+
+    .game-screen.final-mode .scene-window,
+    .game-screen.analysis-mode .scene-window {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      border: 0;
+    }
+
+    .game-column {
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      background: rgba(5, 7, 13, 0.82);
+      border: 2px solid rgba(255, 213, 106, 0.76);
+      box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.35);
+    }
+
+    .column-title {
+      margin: 0;
+      padding: 9px 10px;
+      color: #fff3c7;
+      background: rgba(0, 0, 0, 0.42);
+      border-bottom: 2px solid rgba(255, 213, 106, 0.58);
+      font-size: 16px;
+      line-height: 1;
+      text-align: center;
+      text-shadow: 2px 2px 0 #000;
+      letter-spacing: 0.04em;
+    }
+
+    .backlog-panel {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 8px;
+      padding-bottom: 10px;
+    }
+
+    .backlog-panel .retro-button {
+      justify-self: center;
+      width: calc(100% - 20px);
+      min-height: 36px;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+
+    .task-list {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 0 14px 4px;
+    }
+
+    .task-card {
+      flex: 0 0 225px;
+      width: min(330px, 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px 30px 20px;
+      color: var(--card-text);
+      background-image: url("./images/ui_task_card.png");
+      background-position: center;
+      background-size: 100% 100%;
+      filter: drop-shadow(5px 6px 0 rgba(0, 0, 0, 0.42));
+    }
+
+    .task-title {
+      min-height: 40px;
+      margin: 0 0 7px;
+      color: #2a1707;
+      font-size: 21px;
+      line-height: 1.05;
+      text-align: center;
+      text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
+    }
+
+    .task-stage {
+      min-height: 36px;
+      margin-bottom: 9px;
+      padding: 5px 7px;
+      color: #fff9e5;
+      background: #29200e;
+      border: 2px solid #b77d31;
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1.08;
+      text-align: center;
+    }
+
+    .task-meters {
+      display: grid;
+      gap: 8px;
+    }
+
+    .task-meter-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 4px;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .task-meter-track {
+      height: 13px;
+      padding: 2px;
+      background: rgba(42, 23, 7, 0.86);
+      border: 2px solid rgba(255, 238, 181, 0.65);
+    }
+
+    .task-meter-fill {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #5aa7ff, #92e2ff);
+      transition: width 160ms ease;
+    }
+
+    .task-meter-fill.worklog {
+      background: linear-gradient(90deg, #6bd177, #ffd56a, #f06060);
+    }
+
+    .task-action {
+      width: calc(100% - 12px);
+      min-height: 38px;
+      margin: 12px auto 0;
+      padding: 7px 8px;
+      font-size: 14px;
+      line-height: 1.1;
+    }
+
+    .empty-state {
+      margin: 0 10px;
+      padding: 16px;
+      background: var(--panel);
+      border: 2px solid rgba(255, 213, 106, 0.75);
+      box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.45);
+      text-align: center;
+    }
+
+    .empty-state h2 {
+      font-size: 20px;
+    }
+
+    .empty-state p {
+      font-size: 15px;
+    }
+
+    .scene-panel {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .scene-window {
+      position: relative;
+      margin: 10px;
+      overflow: hidden;
+      background-image:
+        linear-gradient(rgba(5, 7, 13, 0.1), rgba(5, 7, 13, 0.22)),
+        url("images/bg_office_morning.png");
+      background-position: center;
+      background-size: cover;
+      border: 2px solid rgba(255, 213, 106, 0.64);
+    }
+
+    .scene-window.call-active {
+      background-image:
+        linear-gradient(rgba(5, 7, 13, 0.18), rgba(5, 7, 13, 0.36)),
+        var(--scene-bg);
+    }
+
+    .scene-background {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      image-rendering: auto;
+    }
+
+    .scene-character {
+      position: absolute;
+      z-index: 1;
+      left: 50%;
+      bottom: 18px;
+      max-width: 72%;
+      max-height: 78%;
+      transform: translateX(-50%);
+      object-fit: contain;
+      filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.35));
+    }
+
+    .scene-hint {
+      position: absolute;
+      z-index: 2;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      padding: 12px;
+      color: #fff3c7;
+      background: rgba(5, 7, 13, 0.82);
+      border: 2px solid rgba(255, 213, 106, 0.7);
+      font-size: 16px;
+      line-height: 1.25;
+      text-align: center;
+      text-shadow: 2px 2px 0 #000;
+    }
+
+    .game-screen.final-mode .scene-hint,
+    .game-screen.analysis-mode .scene-hint {
+      display: none;
+    }
+
+    .analyze-button {
+      position: absolute;
+      z-index: 12;
+      left: 50%;
+      bottom: 40px;
+      min-width: 280px;
+      transform: translateX(-50%);
+      font-size: 18px;
+    }
+
+    .analyze-button[hidden] {
+      display: none;
+    }
+
+    .manager-panel {
+      display: grid;
+      grid-template-rows: auto 190px 1fr;
+      gap: 10px;
+      padding-bottom: 10px;
+    }
+
+    .fox-box {
+      margin: 0 10px;
+      display: grid;
+      place-items: end center;
+      overflow: hidden;
+      background: rgba(9, 12, 20, 0.84);
+      border: 2px solid rgba(255, 213, 106, 0.8);
+    }
+
+    .fox-box img {
+      width: 150px;
+      height: auto;
+      max-height: 176px;
+      object-fit: contain;
+      display: block;
+    }
+
+    .log-box {
+      min-height: 0;
+      margin: 0 10px;
+      padding: 14px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      color: #fff1ca;
+      background: rgba(5, 7, 13, 0.92);
+      border: 2px solid rgba(255, 213, 106, 0.8);
+      font-size: 17px;
+      line-height: 1.28;
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    .log-line {
+      margin-bottom: 10px;
+    }
+
+    .log-actions {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .log-actions .retro-button {
+      width: 100%;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    .event-overlay {
+      position: absolute;
+      z-index: 10;
+      inset: 0;
+      display: none;
+      background: rgba(0, 0, 0, 0.18);
+    }
+
+    .event-overlay.active {
+      display: block;
+    }
+
+    .dialog-panel {
+      position: absolute;
+      left: 50%;
+      bottom: 24px;
+      width: min(410px, calc(100% - 28px));
+      transform: translateX(-50%);
+      padding: 16px;
+      background: var(--panel);
+      border: 3px solid var(--accent);
+      box-shadow: 7px 7px 0 #030407;
+    }
+
+    .dialog-title {
+      margin: 0 0 8px;
+      font-size: 22px;
+      text-shadow: 2px 2px 0 #000;
+    }
+
+    .dialog-text {
+      margin-bottom: 14px;
+      color: #fff3d1;
+      font-size: 16px;
+    }
+
+    .dialog-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <main class="game-shell" aria-label="Симулятор ПМа: В поисках лимитов">
+    <section id="startScreen" class="screen start-screen active">
+      <div class="start-panel">
+        <h1>Симулятор ПМа:<br>В поисках лимитов</h1>
+        <p>Один день, один поток задач и одна лиса, которая пытается не сгореть раньше релиза.</p>
+        <button id="startDayButton" class="retro-button">Начать день</button>
+      </div>
+    </section>
+
+    <section id="gameScreen" class="screen game-screen">
+      <div class="hud">
+        <div class="meter">
+          <div class="meter-label">
+            <span>Ментальный Ресурс ПМа</span>
+            <span id="mentalValue">100%</span>
+          </div>
+          <div class="meter-track">
+            <div id="mentalFill" class="meter-fill"></div>
+          </div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-label">
+            <span>Счастье клиентов</span>
+            <span id="clientValue">50%</span>
+          </div>
+          <div class="meter-track">
+            <div id="clientFill" class="meter-fill"></div>
+          </div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-label">
+            <span>Настроение команды</span>
+            <span id="teamValue">50%</span>
+          </div>
+          <div class="meter-track">
+            <div id="teamFill" class="meter-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="game-layout">
+        <aside class="game-column backlog-panel" aria-label="Бэклог задач">
+          <h2 class="column-title">БЭКЛОГ ЗАДАЧ</h2>
+          <button id="addTaskButton" class="retro-button">Новая задача</button>
+          <div id="taskList" class="task-list"></div>
+        </aside>
+
+        <section class="game-column scene-panel" aria-label="Игровая сцена">
+          <h2 class="column-title">ИГРОВАЯ СЦЕНА</h2>
+          <div id="sceneWindow" class="scene-window">
+            <img id="sceneBackground" class="scene-background" src="" alt="">
+            <img id="sceneCharacter" class="scene-character" src="" alt="" hidden>
+            <div id="sceneHint" class="scene-hint">Офисное утро. Задачи ждут решения.</div>
+            <button id="analyzeButton" class="retro-button analyze-button" hidden>Проанализировать день</button>
+            <div id="eventOverlay" class="event-overlay" aria-modal="true" role="dialog">
+              <div class="dialog-panel">
+                <h2 id="eventTitle" class="dialog-title">Созвон</h2>
+                <p id="eventText" class="dialog-text">Нужно принять решение.</p>
+                <div id="eventActions" class="dialog-actions"></div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <aside class="game-column manager-panel" aria-label="Статус менеджера">
+          <h2 class="column-title">СТАТУС МЕНЕДЖЕРА</h2>
+          <div class="fox-box">
+            <img id="pmPortrait" src="" alt="">
+          </div>
+          <div id="gameLog" class="log-box" aria-live="polite"></div>
+        </aside>
+      </div>
+
+    </section>
+
+    <section id="gameOverScreen" class="screen game-over-screen">
+      <div class="game-over-panel">
+        <h2 id="gameOverTitle">Игра окончена</h2>
+        <p id="gameOverText">День завершен.</p>
+        <button id="restartButton" class="retro-button">Начать заново</button>
+      </div>
+    </section>
+
+    <section id="endScreen" class="screen end-screen">
+      <div class="game-over-panel">
+        <h2 id="endTitle">День закрыт</h2>
+        <p id="endText">Бэклог пуст.</p>
+        <button id="endRestartButton" class="retro-button">Начать заново</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const FOX_PORTRAITS = {
+      working: "images/fox_pm_working.png",
+      shocked: "images/fox_pm_shocked.png",
+      exhausted: "images/fox_pm_exhausted.png"
+    };
+
+    const STAGES = [
+      {
+        title: "Клиент принес задачу",
+        button: "Обсудить требования",
+        mode: "manual",
+        clickProgress: 25,
+        mentalCost: 1
+      },
+      {
+        title: "Уточнение у команды",
+        button: "Отдать на оценку",
+        mode: "estimation",
+        progressPerTick: 6,
+        worklogsPerTick: 1.2
+      },
+      {
+        title: "Согласование",
+        button: "Утвердить бюджет у клиента",
+        mode: "manual",
+        clickProgress: 25,
+        mentalCost: 2
+      },
+      {
+        title: "В разработке",
+        button: "Чё кого? Сколько осталось?",
+        mode: "development",
+        progressPerTick: 3,
+        worklogsPerTick: 3,
+        latePhaseProgressMultiplier: 0.5,
+        latePhaseWorklogsMultiplier: 2,
+        controlCost: 4,
+        worklogReset: 15,
+        controlProgressBoost: 8,
+        controlSlowdownMs: 4000
+      },
+      {
+        title: "Тестирование ПМом",
+        button: "Тестировать руками",
+        releaseButton: "В РЕЛИЗ!",
+        mode: "testing",
+        clickProgress: 10,
+        mentalCost: 1
+      }
+    ];
+
+    const SCENE_BACKGROUNDS = {
+      retro: "images/bg_retro_analysis.png",
+      lunch: "images/bg_lunch_time.png",
+      office: "images/bg_office_morning.png",
+      zoomTeam: "images/ui_zoom_team.png",
+      bossRoom: "images/bg_boss_room.png"
+    };
+
+    const END_SCREENS = {
+      tired: {
+        title: "День закрыт",
+        rank: "Ранг: Выживший Лисенок 🦊. Бэклог пуст, но какой ценой? Вы доползли до кровати, сил радоваться нет. Зато проект сдан!",
+        background: "images/screen_end_tired.png"
+      },
+      success: {
+        title: "Секретная концовка",
+        rank: "Ранг: ПМ-Бог 😎👑! Вы не просто закрыли бэклог в ноль, вы сохранили рассудок и кукуху! Вечер обещает быть прекрасным, ноутбук закрыт с гордостью!",
+        background: "images/screen_end_success.png"
+      }
+    };
+
+    const GAME_OVER_SCREENS = {
+      mental: {
+        title: "Вы выгорели",
+        text: "Вы выгорели и уволились",
+        background: "images/screen_gameover_0.png"
+      },
+      team: {
+        title: "Команда ушла в бунт",
+        text: "Команда взбунтовалась, выгорела и саботировала проект. Работать некому!",
+        background: "images/screen_gameover_team.png"
+      },
+      client: {
+        title: "Контракт потерян",
+        text: "Клиент в ярости разорвал контракт и засудил компанию!",
+        background: "images/screen_gameover_client.png"
+      }
+    };
+
+    const EVENT_CHARACTERS = {
+      bossClientIdle: "images/boss_client_idle.png"
+    };
+
+    const randomEvents = [
+      {
+        title: "Внезапный созвон с командой",
+        text: "Команда просит быстро решить блокер по задаче.",
+        background: SCENE_BACKGROUNDS.zoomTeam,
+        character: "",
+        choices: [
+          {
+            label: "Разобрать блокер",
+            effects: { mentalResource: -2, teamMood: 12, clientHappiness: -2 },
+            log: "Созвон закрыт: блокер разобран."
+          },
+          {
+            label: "Отложить до вечера",
+            effects: { mentalResource: 1, teamMood: -8, clientHappiness: 2 },
+            log: "Созвон отложен. Команда ворчит."
+          }
+        ]
+      },
+      {
+        title: "Клиент просит статус",
+        text: "Клиент хочет знать, когда задача попадет в релиз.",
+        background: SCENE_BACKGROUNDS.bossRoom,
+        character: EVENT_CHARACTERS.bossClientIdle,
+        choices: [
+          {
+            label: "Дать честный план",
+            effects: { mentalResource: -2, teamMood: 4, clientHappiness: 8 },
+            log: "Клиент получил честный план."
+          },
+          {
+            label: "Пообещать ускорение",
+            effects: { mentalResource: -6, teamMood: -8, clientHappiness: 12 },
+            log: "Клиент доволен, команда напряглась."
+          }
+        ]
+      },
+      {
+        type: "lunch",
+        title: "Время обеда",
+        text: "Живот урчит, а в календаре нашлось окно. Идти на обед?",
+        background: SCENE_BACKGROUNDS.lunch,
+        character: "",
+        choices: [
+          {
+            label: "Да, полноценный обед!",
+            effects: { mentalResource: 25, clientHappiness: -5 },
+            log: "Лиса ушла на полноценный обед. МР восстановился, но клиенты недовольны паузой.",
+            marksFullLunch: true
+          },
+          {
+            label: "Нет, поем за ноутом",
+            effects: { mentalResource: 0, clientHappiness: 3 },
+            log: "Лиса ест за ноутом и быстро отвечает клиентам."
+          }
+        ]
+      }
+    ];
+
+    const state = {
+      screen: "start",
+      mentalResource: 100,
+      clientHappiness: 50,
+      teamMood: 50,
+      nextTaskId: 1,
+      activeTasks: [],
+      isEventActive: false,
+      tickTimerId: null,
+      eventTimerId: null,
+      log: [],
+      lastEventAt: 0,
+      gameOverReason: null,
+      activeLogEvent: null,
+      hasHadFullLunch: false,
+      finalStatus: null,
+      newTasksAdded: 0,
+      controlPings: 0,
+      manualTests: 0,
+      ateFullLunch: false,
+      ateAtLaptop: false
+    };
+
+    const elements = {
+      startScreen: document.querySelector("#startScreen"),
+      gameScreen: document.querySelector("#gameScreen"),
+      gameOverScreen: document.querySelector("#gameOverScreen"),
+      endScreen: document.querySelector("#endScreen"),
+      startDayButton: document.querySelector("#startDayButton"),
+      restartButton: document.querySelector("#restartButton"),
+      endRestartButton: document.querySelector("#endRestartButton"),
+      addTaskButton: document.querySelector("#addTaskButton"),
+      taskList: document.querySelector("#taskList"),
+      mentalValue: document.querySelector("#mentalValue"),
+      mentalFill: document.querySelector("#mentalFill"),
+      clientValue: document.querySelector("#clientValue"),
+      clientFill: document.querySelector("#clientFill"),
+      teamValue: document.querySelector("#teamValue"),
+      teamFill: document.querySelector("#teamFill"),
+      pmPortrait: document.querySelector("#pmPortrait"),
+      gameLog: document.querySelector("#gameLog"),
+      sceneWindow: document.querySelector("#sceneWindow"),
+      sceneBackground: document.querySelector("#sceneBackground"),
+      sceneCharacter: document.querySelector("#sceneCharacter"),
+      sceneHint: document.querySelector("#sceneHint"),
+      analyzeButton: document.querySelector("#analyzeButton"),
+      eventOverlay: document.querySelector("#eventOverlay"),
+      eventTitle: document.querySelector("#eventTitle"),
+      eventText: document.querySelector("#eventText"),
+      eventActions: document.querySelector("#eventActions"),
+      gameOverTitle: document.querySelector("#gameOverTitle"),
+      gameOverText: document.querySelector("#gameOverText"),
+      endTitle: document.querySelector("#endTitle"),
+      endText: document.querySelector("#endText")
+    };
+
+    elements.startDayButton.addEventListener("click", startDay);
+    elements.restartButton.addEventListener("click", startDay);
+    elements.endRestartButton.addEventListener("click", startDay);
+    elements.analyzeButton.addEventListener("click", showDayAnalysis);
+    elements.addTaskButton.addEventListener("click", () => {
+      if (state.isEventActive) return;
+      state.newTasksAdded += 1;
+      addTask();
+      spendMental(3);
+      addLog("В поток пришла новая задача.");
+      maybeTriggerRandomEvent();
+      render();
+    });
+
+    function startDay() {
+      stopTimers();
+      state.screen = "game";
+      state.mentalResource = 100;
+      state.clientHappiness = 50;
+      state.teamMood = 50;
+      state.nextTaskId = 1;
+      state.activeTasks = [];
+      state.isEventActive = false;
+      state.lastEventAt = Date.now();
+      state.gameOverReason = null;
+      state.activeLogEvent = null;
+      state.hasHadFullLunch = false;
+      state.finalStatus = null;
+      state.newTasksAdded = 0;
+      state.controlPings = 0;
+      state.manualTests = 0;
+      state.ateFullLunch = false;
+      state.ateAtLaptop = false;
+      state.log = [];
+      elements.gameScreen.classList.remove("final-mode", "analysis-mode");
+      elements.analyzeButton.hidden = true;
+
+      elements.pmPortrait.src = FOX_PORTRAITS.working;
+      elements.sceneBackground.src = SCENE_BACKGROUNDS.office;
+      elements.sceneHint.textContent = "Офисное утро. Задачи ждут решения.";
+      showScreen("game");
+      addTask("Фича для Гротт");
+      addTask("Лимиты в профиле");
+      addLog("День начался. Лиса открыла бэклог.");
+      state.tickTimerId = setInterval(gameTick, 900);
+      scheduleRandomEvent();
+      render();
+    }
+
+    function stopTimers() {
+      clearInterval(state.tickTimerId);
+      clearTimeout(state.eventTimerId);
+      state.tickTimerId = null;
+      state.eventTimerId = null;
+    }
+
+    function addTask(title) {
+      const taskId = state.nextTaskId;
+      state.nextTaskId += 1;
+
+      const task = {
+        id: taskId,
+        title: title || `Задача #${taskId}`,
+        stageIndex: 0,
+        stageProgress: 0,
+        worklogs: 0,
+        isStageRunning: false,
+        worklogSlowdownUntil: 0
+      };
+
+      state.activeTasks.push(task);
+      return task;
+    }
+
+    function handleTaskAction(taskId) {
+      if (state.isEventActive) return;
+
+      const task = state.activeTasks.find((item) => item.id === taskId);
+      if (!task) return;
+
+      const stage = STAGES[task.stageIndex];
+
+      if (stage.mode === "manual") {
+        spendMental(stage.mentalCost);
+        task.stageProgress = clamp(task.stageProgress + stage.clickProgress, 0, 100);
+        addLog(`Лиса двигает: «${task.title}».`);
+        completeStageIfReady(task);
+      }
+
+      if (stage.mode === "estimation") {
+        task.isStageRunning = true;
+        addLog(`Команда оценивает: «${task.title}».`);
+      }
+
+      if (stage.mode === "development") {
+        spendMental(stage.controlCost);
+        task.worklogs = clamp(task.worklogs - stage.worklogReset, 0, 100);
+        task.stageProgress = clamp(task.stageProgress + stage.controlProgressBoost, 0, 100);
+        task.worklogSlowdownUntil = Date.now() + stage.controlSlowdownMs;
+        changeMetric("teamMood", -3);
+        state.controlPings += 1;
+        addLog(`Лиса уточнила остаток по «${task.title}» и ускорила разработку.`);
+        completeStageIfReady(task);
+      }
+
+      if (stage.mode === "testing") {
+        if (task.stageProgress >= 100) {
+          releaseTask(task);
+        } else {
+          spendMental(stage.mentalCost);
+          state.manualTests += 1;
+          task.stageProgress = clamp(task.stageProgress + stage.clickProgress, 0, 100);
+          addLog(`ПМ тестирует руками: «${task.title}».`);
+        }
+      }
+
+      maybeTriggerRandomEvent();
+      checkGameOver();
+      render();
+    }
+
+    function gameTick() {
+      if (state.screen !== "game" || state.isEventActive) return;
+
+      let changed = false;
+
+      state.activeTasks.forEach((task) => {
+        const stage = STAGES[task.stageIndex];
+
+        if (stage.mode === "estimation" && task.isStageRunning) {
+          task.stageProgress = clamp(task.stageProgress + stage.progressPerTick, 0, 100);
+          task.worklogs = clamp(task.worklogs + stage.worklogsPerTick, 0, 100);
+          changed = true;
+          completeStageIfReady(task);
+        }
+
+        if (stage.mode === "development") {
+          task.isStageRunning = true;
+
+          const isLatePhase = task.stageProgress >= 50;
+          const slowdownActive = Date.now() < task.worklogSlowdownUntil;
+          const progressSpeed = stage.progressPerTick * (isLatePhase ? stage.latePhaseProgressMultiplier : 1);
+          const worklogSpeed = stage.worklogsPerTick * (isLatePhase && !slowdownActive ? stage.latePhaseWorklogsMultiplier : 1);
+
+          task.stageProgress = clamp(task.stageProgress + progressSpeed, 0, 100);
+          task.worklogs = clamp(task.worklogs + worklogSpeed, 0, 100);
+          changed = true;
+
+          if (task.worklogs >= 100) {
+            task.worklogs = 45;
+            spendMental(8);
+            changeMetric("teamMood", -3);
+            addLog(`Ворклоги по «${task.title}» переполнились. Лиса тушит пожар.`);
+          }
+
+          completeStageIfReady(task);
+        }
+      });
+
+      if (changed) {
+        checkGameOver();
+        render();
+      }
+    }
+
+    function completeStageIfReady(task) {
+      if (task.stageProgress < 100 || task.stageIndex >= STAGES.length - 1) return;
+
+      task.stageIndex += 1;
+      task.stageProgress = 0;
+      task.worklogs = 0;
+      task.isStageRunning = false;
+      task.worklogSlowdownUntil = 0;
+      changeMetric("clientHappiness", -2);
+      addLog(`«${task.title}»: этап «${STAGES[task.stageIndex].title}». Клиент ждет и нервничает.`);
+
+      if (STAGES[task.stageIndex].mode === "development") {
+        task.isStageRunning = true;
+      }
+    }
+
+    function releaseTask(task) {
+      state.activeTasks = state.activeTasks.filter((item) => item.id !== task.id);
+      changeMetric("clientHappiness", 15);
+      changeMetric("teamMood", 3);
+      addLog(`«${task.title}» ушла в релиз. Клиент счастлив.`);
+
+      if (state.activeTasks.length === 0 && state.screen === "game") {
+        completeDay();
+      }
+    }
+
+    function completeDay() {
+      const ending = state.mentalResource >= 30 ? END_SCREENS.success : END_SCREENS.tired;
+
+      stopTimers();
+      state.screen = "final";
+      state.finalStatus = {
+        type: "win",
+        title: ending.title,
+        message: ending.rank,
+        background: ending.background,
+        mentalResource: state.mentalResource,
+        clientHappiness: state.clientHappiness,
+        teamMood: state.teamMood
+      };
+      state.isEventActive = false;
+      state.activeLogEvent = null;
+      elements.eventOverlay.classList.remove("active");
+      elements.sceneWindow.classList.remove("call-active");
+      elements.sceneCharacter.src = "";
+      elements.sceneCharacter.hidden = true;
+      elements.sceneBackground.src = ending.background;
+      elements.analyzeButton.hidden = false;
+      addLog(ending.rank);
+      showScreen("final");
+    }
+
+    function triggerRandomEvent(eventData) {
+      const availableEvents = state.hasHadFullLunch
+        ? randomEvents.filter((event) => event.type !== "lunch")
+        : randomEvents;
+      const event = eventData || availableEvents[Math.floor(Math.random() * availableEvents.length)];
+      state.isEventActive = true;
+      state.lastEventAt = Date.now();
+
+      elements.sceneBackground.src = event.background;
+      elements.sceneWindow.classList.add("call-active");
+      elements.sceneCharacter.src = event.character || "";
+      elements.sceneCharacter.hidden = !event.character;
+      elements.sceneHint.textContent = event.title;
+      elements.eventTitle.textContent = event.title;
+      elements.eventText.textContent = event.text;
+      elements.eventActions.innerHTML = "";
+
+      state.activeLogEvent = null;
+      event.choices.forEach((choice) => {
+        const button = document.createElement("button");
+        button.className = "retro-button";
+        button.textContent = choice.label;
+        button.addEventListener("click", () => resolveEvent(choice));
+        elements.eventActions.appendChild(button);
+      });
+
+      elements.eventOverlay.classList.add("active");
+      addLog(`Созвон: ${event.title}.`);
+      render();
+    }
+
+    function resolveEvent(choice) {
+      if (choice.marksFullLunch) {
+        state.hasHadFullLunch = true;
+      }
+
+      Object.entries(choice.effects).forEach(([metric, delta]) => changeMetric(metric, delta));
+      closeActiveEvent(choice.log);
+    }
+
+    function resolveLogEvent(choiceIndex) {
+      const event = state.activeLogEvent;
+      if (!event || !event.choices[choiceIndex]) return;
+
+      const choice = event.choices[choiceIndex];
+      if (choice.marksFullLunch) {
+        state.hasHadFullLunch = true;
+      }
+
+      Object.entries(choice.effects).forEach(([metric, delta]) => changeMetric(metric, delta));
+      closeActiveEvent(choice.log);
+    }
+
+    function closeActiveEvent(logMessage) {
+      state.isEventActive = false;
+      state.activeLogEvent = null;
+      elements.eventOverlay.classList.remove("active");
+      elements.sceneWindow.classList.remove("call-active");
+      elements.sceneBackground.src = SCENE_BACKGROUNDS.office;
+      elements.sceneCharacter.src = "";
+      elements.sceneCharacter.hidden = true;
+      elements.sceneHint.textContent = "Офисное утро. Задачи ждут решения.";
+      addLog(logMessage);
+      checkGameOver();
+      scheduleRandomEvent();
+      render();
+    }
+
+    function scheduleRandomEvent() {
+      clearTimeout(state.eventTimerId);
+      const delay = 25000 + Math.random() * 5000;
+      state.eventTimerId = setTimeout(() => {
+        if (state.screen === "game" && !state.isEventActive) {
+          triggerRandomEvent();
+        }
+      }, delay);
+    }
+
+    function maybeTriggerRandomEvent() {
+      if (state.screen !== "game" || state.isEventActive) return;
+
+      const timeSinceLastEvent = Date.now() - state.lastEventAt;
+      if (timeSinceLastEvent < 25000) return;
+
+      if (Math.random() < 0.01) {
+        clearTimeout(state.eventTimerId);
+        triggerRandomEvent();
+      }
+    }
+
+    function spendMental(amount) {
+      changeMetric("mentalResource", -amount);
+    }
+
+    function changeMetric(metric, delta) {
+      state[metric] = clamp(state[metric] + delta, 0, 100);
+
+      if (state.screen === "game") {
+        checkGameOver();
+      }
+    }
+
+    function checkGameOver() {
+      if (state.screen === "gameOver" || state.screen === "final" || state.screen === "analysis") return;
+
+      let reason = null;
+
+      if (state.mentalResource <= 0) {
+        reason = "mental";
+      } else if (state.teamMood <= 0) {
+        reason = "team";
+      } else if (state.clientHappiness <= 0) {
+        reason = "client";
+      }
+
+      if (!reason) return;
+
+      const gameOver = GAME_OVER_SCREENS[reason];
+      stopTimers();
+      state.screen = "final";
+      state.gameOverReason = reason;
+      state.finalStatus = {
+        type: "gameOver",
+        reason,
+        title: gameOver.title,
+        message: gameOver.text,
+        background: gameOver.background,
+        mentalResource: state.mentalResource,
+        clientHappiness: state.clientHappiness,
+        teamMood: state.teamMood
+      };
+      state.isEventActive = false;
+      state.activeLogEvent = null;
+      elements.eventOverlay.classList.remove("active");
+      elements.sceneWindow.classList.remove("call-active");
+      elements.sceneCharacter.src = "";
+      elements.sceneCharacter.hidden = true;
+      elements.sceneBackground.src = gameOver.background;
+      elements.analyzeButton.hidden = false;
+      addLog(gameOver.text);
+      showScreen("final");
+    }
+
+    function showScreen(screenName) {
+      const isGameSurface = screenName === "game" || screenName === "final" || screenName === "analysis";
+      elements.startScreen.classList.toggle("active", screenName === "start");
+      elements.gameScreen.classList.toggle("active", isGameSurface);
+      elements.gameOverScreen.classList.toggle("active", false);
+      elements.endScreen.classList.toggle("active", false);
+      elements.gameScreen.classList.toggle("final-mode", screenName === "final");
+      elements.gameScreen.classList.toggle("analysis-mode", screenName === "analysis");
+    }
+
+    function showDayAnalysis() {
+      if (!state.finalStatus) return;
+
+      state.screen = "analysis";
+      elements.analyzeButton.hidden = true;
+      elements.eventOverlay.classList.remove("active");
+      elements.sceneWindow.classList.remove("call-active");
+      elements.sceneBackground.src = SCENE_BACKGROUNDS.retro;
+      elements.sceneCharacter.src = "";
+      elements.sceneCharacter.hidden = true;
+      state.log = buildDayAnalysis();
+      showScreen("analysis");
+      render();
+    }
+
+    function buildDayAnalysis() {
+      const final = state.finalStatus;
+      const lines = [
+        "РАЗБОР ОШИБОК ПМА",
+        final.message,
+        `Финальные шкалы: МР — ${final.mentalResource}%, счастье клиентов — ${final.clientHappiness}%, настроение команды — ${final.teamMood}%.`
+      ];
+
+      if (final.teamMood < 35) {
+        lines.push("• Давление на команду: Вы слишком часто использовали кнопку 'Чё кого?' (-3% настроения за клик). Пинги помогают временно сбить ворклоги и дать буст к прогрессу, но уничтожают лояльность разработчиков. Попробуйте давать им больше свободы.");
+      } else if (final.teamMood >= 70) {
+        lines.push("• Сильный лидер: Вы сохранили отличный климат в команде! Своевременные релизы задач и правильные решения на созвонах уберегли разработчиков от выгорания.");
+      }
+
+      if (final.clientHappiness < 35) {
+        lines.push("• Проблемы с клиентом: Лояльность на дне. Помните, что каждая смена статуса задачи на внутренний этап отнимает у клиента 2% терпения. Не маринуйте задачи на внутренних этапах слишком долго, быстрее ведите их к релизу.");
+      } else if (final.clientHappiness >= 70) {
+        lines.push("• Клиентский сервис: Отлично! Вы быстро двигали задачи в релиз (+15% к счастью) и, возможно, отказались от полноценного обеда ради того, чтобы остаться на связи за ноутом (+3% к счастью).");
+      }
+
+      if (final.mentalResource < 30) {
+        lines.push("• Выгорание близко: Вы истощены. Вероятно, вы тратили слишком много сил на ручное тестирование (этап 4) или проигнорировали полноценный обед, выбрав работу за ноутом. Помните: мертвый ПМ проекту не поможет.");
+      } else if (final.mentalResource >= 70) {
+        lines.push("• Work-Life Balance: Вы мастерски распределили свои силы! Своевременный полноценный обед (+25% МР) вернул вас в строй в критический момент, позволив завершить день со свежей головой.");
+      }
+
+      if (final.type === "win" && state.newTasksAdded > 0) {
+        lines.push("• Повышенные обязательства: Вы добровольно расширили бэклог кнопкой 'Новая задача'. Это был огромный риск завалить весь день, но вы очистили бэклог до конца как настоящий профессионал!");
+      }
+
+      if (lines.length === 3) {
+        lines.push("• Стабильный день: Вы прошли без критических перекосов. Не идеально, но управляемо: именно так часто и выглядит настоящий проектный день.");
+      }
+
+      return lines;
+    }
+
+    function render() {
+      renderHud();
+      renderTasks();
+      renderScene();
+      renderPortrait();
+      renderLog();
+    }
+
+    function renderHud() {
+      setMeter(elements.mentalValue, elements.mentalFill, state.mentalResource);
+      setMeter(elements.clientValue, elements.clientFill, state.clientHappiness);
+      setMeter(elements.teamValue, elements.teamFill, state.teamMood);
+    }
+
+    function renderTasks() {
+      if (state.activeTasks.length === 0) {
+        elements.taskList.innerHTML = `
+          <div class="empty-state">
+            <h2>Поток пуст</h2>
+            <p>Можно выдохнуть или взять новую задачу.</p>
+          </div>
+        `;
+        return;
+      }
+
+      elements.taskList.innerHTML = state.activeTasks.map(createTaskCard).join("");
+      elements.taskList.querySelectorAll("[data-task-action]").forEach((button) => {
+        button.addEventListener("click", () => handleTaskAction(Number(button.dataset.taskAction)));
+      });
+    }
+
+    function createTaskCard(task) {
+      const stage = STAGES[task.stageIndex];
+      const buttonText = getTaskButtonText(task);
+      const disabled = state.isEventActive || (stage.mode === "estimation" && task.isStageRunning) ? "disabled" : "";
+
+      return `
+        <article class="task-card">
+          <div>
+            <h2 class="task-title">${escapeHtml(task.title)}</h2>
+            <div class="task-stage">${escapeHtml(stage.title)}</div>
+            <div class="task-meters">
+              ${createTaskMeter("Прогресс этапа", task.stageProgress, "progress")}
+              ${createTaskMeter("Ворклоги", task.worklogs, "worklog")}
+            </div>
+          </div>
+          <button class="retro-button task-action" data-task-action="${task.id}" ${disabled}>
+            ${escapeHtml(buttonText)}
+          </button>
+        </article>
+      `;
+    }
+
+    function getTaskButtonText(task) {
+      const stage = STAGES[task.stageIndex];
+
+      if (stage.mode === "estimation" && task.isStageRunning) return "Команда думает...";
+      if (stage.mode === "testing" && task.stageProgress >= 100) return stage.releaseButton;
+
+      return stage.button;
+    }
+
+    function createTaskMeter(label, value, type) {
+      return `
+        <div>
+          <div class="task-meter-label">
+            <span>${label}</span>
+            <span>${value}%</span>
+          </div>
+          <div class="task-meter-track">
+            <div class="task-meter-fill ${type}" style="width: ${value}%"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderScene() {
+      if (state.isEventActive || state.screen === "final" || state.screen === "analysis") return;
+
+      elements.sceneWindow.classList.remove("call-active");
+      elements.sceneBackground.src = SCENE_BACKGROUNDS.office;
+      elements.sceneCharacter.src = "";
+      elements.sceneCharacter.hidden = true;
+      elements.sceneHint.textContent = state.activeTasks.length
+        ? "Офисное утро. Бэклог слева ждет решений."
+        : "Поток пуст. Можно взять новую задачу.";
+    }
+
+    function renderPortrait() {
+      if (state.screen === "final") return;
+
+      if (state.mentalResource <= 25) {
+      elements.pmPortrait.src = FOX_PORTRAITS.exhausted;
+      return;
+      }
+
+      if (state.isEventActive || state.clientHappiness <= 20) {
+        elements.pmPortrait.src = FOX_PORTRAITS.shocked;
+        return;
+      }
+
+      elements.pmPortrait.src = FOX_PORTRAITS.working;
+    }
+
+    function renderLog() {
+      const visibleLines = state.screen === "analysis" ? state.log : state.log.slice(-5);
+      const lines = visibleLines
+        .map((line) => `<div class="log-line">${escapeHtml(line)}</div>`)
+        .join("");
+
+      const actions = state.activeLogEvent
+        ? `<div class="log-actions">${state.activeLogEvent.choices.map((choice, index) => `<button class="retro-button" data-log-choice="${index}">${escapeHtml(choice.label)}</button>`).join("")}</div>`
+        : "";
+
+      elements.gameLog.innerHTML = lines + actions;
+      elements.gameLog.querySelectorAll("[data-log-choice]").forEach((button) => {
+        button.addEventListener("click", () => resolveLogEvent(Number(button.dataset.logChoice)));
+      });
+    }
+
+    function addLog(message) {
+      state.log.push(message);
+      if (state.log.length > 30) state.log.shift();
+    }
+
+
+    function setMeter(valueElement, fillElement, value) {
+      const safeValue = clamp(value, 0, 100);
+      valueElement.textContent = `${safeValue}%`;
+      fillElement.style.width = `${safeValue}%`;
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, Math.round(value)));
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+  </script>
+</body>
+</html>
