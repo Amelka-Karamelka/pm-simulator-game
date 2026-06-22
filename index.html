@@ -517,6 +517,10 @@
       display: none;
     }
 
+    .analyze-button:active {
+      transform: translateX(-50%) translate(3px, 3px);
+    }
+
     .manager-panel {
       display: grid;
       grid-template-rows: auto 190px 1fr;
@@ -671,7 +675,7 @@
             <img id="sceneBackground" class="scene-background" src="" alt="">
             <img id="sceneCharacter" class="scene-character" src="" alt="" hidden>
             <div id="sceneHint" class="scene-hint">Офисное утро. Задачи ждут решения.</div>
-            <button id="analyzeButton" class="retro-button analyze-button" hidden>Проанализировать день</button>
+            <button id="analyzeButton" class="retro-button analyze-button" type="button" onclick="showDayAnalysis()" hidden>Проанализировать день</button>
             <div id="eventOverlay" class="event-overlay" aria-modal="true" role="dialog">
               <div class="dialog-panel">
                 <h2 id="eventTitle" class="dialog-title">Созвон</h2>
@@ -957,6 +961,7 @@
       state.log = [];
       elements.gameScreen.classList.remove("final-mode", "analysis-mode");
       elements.analyzeButton.hidden = true;
+      elements.analyzeButton.style.display = "";
 
       elements.pmPortrait.src = FOX_PORTRAITS.working;
       elements.sceneBackground.src = SCENE_BACKGROUNDS.office;
@@ -1134,6 +1139,7 @@
       elements.sceneCharacter.src = "";
       elements.sceneCharacter.hidden = true;
       elements.sceneBackground.src = ending.background;
+      elements.analyzeButton.style.display = "";
       elements.analyzeButton.hidden = false;
       addLog(ending.rank);
       showScreen("final");
@@ -1277,6 +1283,7 @@
       elements.sceneCharacter.src = "";
       elements.sceneCharacter.hidden = true;
       elements.sceneBackground.src = gameOver.background;
+      elements.analyzeButton.style.display = "";
       elements.analyzeButton.hidden = false;
       addLog(gameOver.text);
       showScreen("final");
@@ -1293,10 +1300,21 @@
     }
 
     function showDayAnalysis() {
-      if (!state.finalStatus) return;
+      if (!state.finalStatus) {
+        state.finalStatus = {
+          type: state.activeTasks.length === 0 ? "win" : "gameOver",
+          title: "Финал дня",
+          message: "Финал наступил, но подробный статус не сохранился. Разбор построен по текущим шкалам.",
+          background: elements.sceneBackground.src,
+          mentalResource: state.mentalResource,
+          clientHappiness: state.clientHappiness,
+          teamMood: state.teamMood
+        };
+      }
 
       state.screen = "analysis";
       elements.analyzeButton.hidden = true;
+      elements.analyzeButton.style.display = "none";
       elements.eventOverlay.classList.remove("active");
       elements.sceneWindow.classList.remove("call-active");
       elements.sceneBackground.src = SCENE_BACKGROUNDS.retro;
