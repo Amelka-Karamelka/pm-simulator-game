@@ -278,6 +278,11 @@
     .game-screen.analysis-mode .manager-panel {
       display: grid;
       background: #030407;
+      grid-template-rows: auto 1fr;
+    }
+
+    .game-screen.analysis-mode .fox-box {
+      display: none;
     }
 
     .game-screen.final-mode .scene-panel .column-title,
@@ -380,7 +385,7 @@
 
     .task-meters {
       display: grid;
-      gap: 8px;
+      gap: 6px;
     }
 
     .task-meter-label {
@@ -417,6 +422,17 @@
       padding: 7px 8px;
       font-size: 14px;
       line-height: 1.1;
+    }
+
+    .task-actions {
+      display: grid;
+      gap: 5px;
+    }
+
+    .task-actions .task-action {
+      min-height: 32px;
+      margin-top: 0;
+      font-size: 12px;
     }
 
     .empty-state {
@@ -519,6 +535,10 @@
 
     .analyze-button:active {
       transform: translateX(-50%) translate(3px, 3px);
+    }
+
+    #downloadLogButton {
+      bottom: 24px;
     }
 
     .manager-panel {
@@ -676,6 +696,7 @@
             <img id="sceneCharacter" class="scene-character" src="" alt="" hidden>
             <div id="sceneHint" class="scene-hint">Офисное утро. Задачи ждут решения.</div>
             <button id="analyzeButton" class="retro-button analyze-button" type="button" onclick="showDayAnalysis()" hidden>Проанализировать день</button>
+            <button id="downloadLogButton" class="retro-button analyze-button" type="button" onclick="downloadDebugLog()" hidden>Скачать лог дня</button>
             <div id="eventOverlay" class="event-overlay" aria-modal="true" role="dialog">
               <div class="dialog-panel">
                 <h2 id="eventTitle" class="dialog-title">Созвон</h2>
@@ -715,156 +736,78 @@
     </section>
   </main>
 
+  
   <script>
-    const FOX_PORTRAITS = {
-      working: "images/fox_pm_working.png",
-      shocked: "images/fox_pm_shocked.png",
-      exhausted: "images/fox_pm_exhausted.png"
+    const ASSETS = {
+      backgrounds: {
+        office: "images/bg_office_morning.png",
+        zoom: "images/ui_zoom_team.png",
+        boss: "images/bg_boss_room.png",
+        lunch: "images/bg_lunch_time.png",
+        retro: "images/bg_retro_analysis.png"
+      },
+      endings: {
+        success: "images/screen_end_success.png",
+        tired: "images/screen_end_tired.png",
+        mental: "images/screen_gameover_0.png",
+        team: "images/screen_gameover_team.png",
+        client: "images/screen_gameover_client.png"
+      },
+      characters: {
+        foxWorking: "images/fox_pm_working.png",
+        foxShocked: "images/fox_pm_shocked.png",
+        foxExhausted: "images/fox_pm_exhausted.png",
+        bossIdle: "images/boss_client_idle.png"
+      }
     };
 
-    const STAGES = [
-      {
-        title: "Клиент принес задачу",
-        button: "Обсудить требования",
-        mode: "manual",
-        clickProgress: 25,
-        mentalCost: 1
-      },
-      {
-        title: "Уточнение у команды",
-        button: "Отдать на оценку",
-        mode: "estimation",
-        progressPerTick: 6,
-        worklogsPerTick: 1.2
-      },
-      {
-        title: "Согласование",
-        button: "Утвердить бюджет у клиента",
-        mode: "manual",
-        clickProgress: 25,
-        mentalCost: 2
-      },
-      {
-        title: "В разработке",
-        button: "Чё кого? Сколько осталось?",
-        mode: "development",
-        progressPerTick: 3,
-        worklogsPerTick: 3,
-        latePhaseProgressMultiplier: 0.5,
-        latePhaseWorklogsMultiplier: 2,
-        controlCost: 4,
-        worklogReset: 15,
-        controlProgressBoost: 8,
-        controlSlowdownMs: 4000
-      },
-      {
-        title: "Тестирование ПМом",
-        button: "Тестировать руками",
-        releaseButton: "В РЕЛИЗ!",
-        mode: "testing",
-        clickProgress: 10,
-        mentalCost: 1
-      }
+    const TASK_SIZES = [
+      { key: "small", title: "Маленькая", hours: 30, percentPerHour: 3.3 },
+      { key: "medium", title: "Средняя", hours: 60, percentPerHour: 1.6 },
+      { key: "large", title: "Большая", hours: 100, percentPerHour: 1 }
     ];
 
-    const SCENE_BACKGROUNDS = {
-      retro: "images/bg_retro_analysis.png",
-      lunch: "images/bg_lunch_time.png",
-      office: "images/bg_office_morning.png",
-      zoomTeam: "images/ui_zoom_team.png",
-      bossRoom: "images/bg_boss_room.png"
-    };
-
-    const END_SCREENS = {
-      tired: {
-        title: "День закрыт",
-        rank: "Ранг: Выживший Лисенок 🦊. Бэклог пуст, но какой ценой? Вы доползли до кровати, сил радоваться нет. Зато проект сдан!",
-        background: "images/screen_end_tired.png"
-      },
-      success: {
-        title: "Секретная концовка",
-        rank: "Ранг: ПМ-Бог 😎👑! Вы не просто закрыли бэклог в ноль, вы сохранили рассудок и кукуху! Вечер обещает быть прекрасным, ноутбук закрыт с гордостью!",
-        background: "images/screen_end_success.png"
-      }
-    };
-
-    const GAME_OVER_SCREENS = {
-      mental: {
-        title: "Вы выгорели",
-        text: "Вы выгорели и уволились",
-        background: "images/screen_gameover_0.png"
-      },
-      team: {
-        title: "Команда ушла в бунт",
-        text: "Команда взбунтовалась, выгорела и саботировала проект. Работать некому!",
-        background: "images/screen_gameover_team.png"
-      },
-      client: {
-        title: "Контракт потерян",
-        text: "Клиент в ярости разорвал контракт и засудил компанию!",
-        background: "images/screen_gameover_client.png"
-      }
-    };
-
-    const EVENT_CHARACTERS = {
-      bossClientIdle: "images/boss_client_idle.png"
+    const STAGES = {
+      1: { title: "Клиент принес задачу" },
+      2: { title: "Оценка" },
+      3: { title: "Согласование бюджета" },
+      4: { title: "В разработке" },
+      5: { title: "Тестирование" },
+      6: { title: "Готово к релизу" }
     };
 
     const randomEvents = [
       {
+        type: "team",
         title: "Внезапный созвон с командой",
         text: "Команда просит быстро решить блокер по задаче.",
-        background: SCENE_BACKGROUNDS.zoomTeam,
+        background: ASSETS.backgrounds.zoom,
         character: "",
         choices: [
-          {
-            label: "Разобрать блокер",
-            effects: { mentalResource: -2, teamMood: 12, clientHappiness: -2 },
-            log: "Созвон закрыт: блокер разобран."
-          },
-          {
-            label: "Отложить до вечера",
-            effects: { mentalResource: 1, teamMood: -8, clientHappiness: 2 },
-            log: "Созвон отложен. Команда ворчит."
-          }
+          { label: "Разобрать блокер", effects: { mentalResource: -2, teamMood: 12, clientHappiness: -2 }, log: "Созвон закрыт: блокер разобран." },
+          { label: "Отложить до вечера", effects: { mentalResource: 1, teamMood: -8, clientHappiness: 2 }, log: "Созвон отложен. Команда ворчит." }
         ]
       },
       {
+        type: "client",
         title: "Клиент просит статус",
         text: "Клиент хочет знать, когда задача попадет в релиз.",
-        background: SCENE_BACKGROUNDS.bossRoom,
-        character: EVENT_CHARACTERS.bossClientIdle,
+        background: ASSETS.backgrounds.boss,
+        character: ASSETS.characters.bossIdle,
         choices: [
-          {
-            label: "Дать честный план",
-            effects: { mentalResource: -2, teamMood: 4, clientHappiness: 8 },
-            log: "Клиент получил честный план."
-          },
-          {
-            label: "Пообещать ускорение",
-            effects: { mentalResource: -6, teamMood: -8, clientHappiness: 12 },
-            log: "Клиент доволен, команда напряглась."
-          }
+          { label: "Дать честный план", effects: { mentalResource: -2, teamMood: 4, clientHappiness: 8 }, clientFriendly: true, log: "Клиент получил честный план." },
+          { label: "Пообещать ускорение", effects: { mentalResource: -6, teamMood: -8, clientHappiness: 12 }, clientFriendly: true, log: "Клиент доволен, команда напряглась." }
         ]
       },
       {
         type: "lunch",
         title: "Время обеда",
         text: "Живот урчит, а в календаре нашлось окно. Идти на обед?",
-        background: SCENE_BACKGROUNDS.lunch,
+        background: ASSETS.backgrounds.lunch,
         character: "",
         choices: [
-          {
-            label: "Да, полноценный обед!",
-            effects: { mentalResource: 25, clientHappiness: -5 },
-            log: "Лиса ушла на полноценный обед. МР восстановился, но клиенты недовольны паузой.",
-            marksFullLunch: true
-          },
-          {
-            label: "Нет, поем за ноутом",
-            effects: { mentalResource: 0, clientHappiness: 3 },
-            log: "Лиса ест за ноутом и быстро отвечает клиентам."
-          }
+          { label: "Да, полноценный обед!", effects: { mentalResource: 25, clientHappiness: -5 }, fullLunch: true, log: "Лиса ушла на полноценный обед. МР восстановился, но клиенты недовольны паузой." },
+          { label: "Нет, поем за ноутом", effects: { mentalResource: 0, clientHappiness: 3 }, laptopLunch: true, clientFriendly: true, log: "Лиса ест за ноутом и быстро отвечает клиентам." }
         ]
       }
     ];
@@ -880,16 +823,14 @@
       tickTimerId: null,
       eventTimerId: null,
       log: [],
+      debugLog: [],
       lastEventAt: 0,
-      gameOverReason: null,
-      activeLogEvent: null,
-      hasHadFullLunch: false,
       finalStatus: null,
+      hasHadFullLunch: false,
+      clientFriendlyChoices: 0,
       newTasksAdded: 0,
-      controlPings: 0,
-      manualTests: 0,
-      ateFullLunch: false,
-      ateAtLaptop: false
+      flags: {},
+      stats: {}
     };
 
     const elements = {
@@ -915,29 +856,41 @@
       sceneCharacter: document.querySelector("#sceneCharacter"),
       sceneHint: document.querySelector("#sceneHint"),
       analyzeButton: document.querySelector("#analyzeButton"),
+      downloadLogButton: document.querySelector("#downloadLogButton"),
       eventOverlay: document.querySelector("#eventOverlay"),
       eventTitle: document.querySelector("#eventTitle"),
       eventText: document.querySelector("#eventText"),
-      eventActions: document.querySelector("#eventActions"),
-      gameOverTitle: document.querySelector("#gameOverTitle"),
-      gameOverText: document.querySelector("#gameOverText"),
-      endTitle: document.querySelector("#endTitle"),
-      endText: document.querySelector("#endText")
+      eventActions: document.querySelector("#eventActions")
     };
 
     elements.startDayButton.addEventListener("click", startDay);
     elements.restartButton.addEventListener("click", startDay);
     elements.endRestartButton.addEventListener("click", startDay);
-    elements.analyzeButton.addEventListener("click", showDayAnalysis);
-    elements.addTaskButton.addEventListener("click", () => {
-      if (state.isEventActive) return;
+    // Кнопка анализа использует inline onclick, чтобы локальный file:// запуск был максимально надежным.
+    elements.addTaskButton.addEventListener("click", function () {
+      if (state.isEventActive || state.screen !== "game") return;
       state.newTasksAdded += 1;
       addTask();
-      spendMental(3);
+      spendMental(2);
       addLog("В поток пришла новая задача.");
+      updateGreedFlag();
       maybeTriggerRandomEvent();
       render();
     });
+
+    function resetFlags() {
+      state.flags = {
+        greedMode: false,
+        ignoredCrunch: false,
+        overPushed: false,
+        clientNeglect: false,
+        negotiationAbuse: false,
+        qaSkipper: false,
+        selfSacrifice: false,
+        starvation: false
+      };
+      state.stats = { pushCount: 0, negotiationCount: 0, qaSkipCount: 0, manualTestClicks: 0, laptopLunches: 0 };
+    }
 
     function startDay() {
       stopTimers();
@@ -949,28 +902,27 @@
       state.activeTasks = [];
       state.isEventActive = false;
       state.lastEventAt = Date.now();
-      state.gameOverReason = null;
-      state.activeLogEvent = null;
-      state.hasHadFullLunch = false;
       state.finalStatus = null;
+      state.hasHadFullLunch = false;
+      state.clientFriendlyChoices = 0;
       state.newTasksAdded = 0;
-      state.controlPings = 0;
-      state.manualTests = 0;
-      state.ateFullLunch = false;
-      state.ateAtLaptop = false;
       state.log = [];
+      state.debugLog = [];
+      resetFlags();
       elements.gameScreen.classList.remove("final-mode", "analysis-mode");
       elements.analyzeButton.hidden = true;
       elements.analyzeButton.style.display = "";
-
-      elements.pmPortrait.src = FOX_PORTRAITS.working;
-      elements.sceneBackground.src = SCENE_BACKGROUNDS.office;
+      elements.downloadLogButton.hidden = true;
+      elements.downloadLogButton.style.display = "";
+      elements.pmPortrait.src = ASSETS.characters.foxWorking;
+      elements.sceneBackground.src = ASSETS.backgrounds.office;
       elements.sceneHint.textContent = "Офисное утро. Задачи ждут решения.";
-      showScreen("game");
       addTask("Фича для Гротт");
       addTask("Лимиты в профиле");
       addLog("День начался. Лиса открыла бэклог.");
-      state.tickTimerId = setInterval(gameTick, 900);
+      debug("day_start", snapshotState());
+      showScreen("game");
+      state.tickTimerId = setInterval(gameTick, 1000);
       scheduleRandomEvent();
       render();
     }
@@ -983,108 +935,155 @@
     }
 
     function addTask(title) {
-      const taskId = state.nextTaskId;
-      state.nextTaskId += 1;
-
+      const taskId = state.nextTaskId++;
       const task = {
         id: taskId,
-        title: title || `Задача #${taskId}`,
-        stageIndex: 0,
-        stageProgress: 0,
+        title: title || "Задача #" + taskId,
+        stageIndex: 1,
+        progress: 0,
         worklogs: 0,
-        isStageRunning: false,
+        quality: 0,
+        size: null,
+        sizeIndex: null,
+        isRunning: false,
+        ignoredCrunchActive: false,
+        ignoredCrunchStartedAt: 0,
+        pushCount: 0,
+        negotiationCount: 0,
+        manualTestClicks: 0,
+        qaSkipped: false,
         worklogSlowdownUntil: 0
       };
-
       state.activeTasks.push(task);
+      updateGreedFlag();
+      debug("task_created", { task: snapshotTask(task) });
       return task;
     }
 
-    function handleTaskAction(taskId) {
-      if (state.isEventActive) return;
-
-      const task = state.activeTasks.find((item) => item.id === taskId);
+    function handleTaskAction(taskId, action) {
+      if (state.isEventActive || state.screen !== "game") return;
+      const task = state.activeTasks.find(function (item) { return item.id === taskId; });
       if (!task) return;
-
-      const stage = STAGES[task.stageIndex];
-
-      if (stage.mode === "manual") {
-        spendMental(stage.mentalCost);
-        task.stageProgress = clamp(task.stageProgress + stage.clickProgress, 0, 100);
-        addLog(`Лиса двигает: «${task.title}».`);
+      debug("task_action", { action: action, before: snapshotTask(task) });
+      if (action === "requirements") {
+        spendMental(1);
+        task.progress = clamp(task.progress + 25, 0, 100);
+        addLog("Лиса обсудила требования: «" + task.title + "».");
         completeStageIfReady(task);
       }
-
-      if (stage.mode === "estimation") {
-        task.isStageRunning = true;
-        addLog(`Команда оценивает: «${task.title}».`);
+      if (action === "estimate") {
+        if (!task.size) assignTaskSize(task);
+        task.isRunning = true;
+        addLog("Команда оценивает «" + task.title + "». Размер: " + task.size.title + ".");
       }
-
-      if (stage.mode === "development") {
-        spendMental(stage.controlCost);
-        task.worklogs = clamp(task.worklogs - stage.worklogReset, 0, 100);
-        task.stageProgress = clamp(task.stageProgress + stage.controlProgressBoost, 0, 100);
-        task.worklogSlowdownUntil = Date.now() + stage.controlSlowdownMs;
+      if (action === "budget") {
+        spendMental(2);
+        task.progress = clamp(task.progress + 25, 0, 100);
+        addLog("Бюджет по «" + task.title + "» согласовывается.");
+        completeStageIfReady(task);
+      }
+      if (action === "ignoreCrunch") {
+        task.ignoredCrunchActive = !task.ignoredCrunchActive;
+        task.ignoredCrunchStartedAt = task.ignoredCrunchActive ? Date.now() : 0;
+        addLog(task.ignoredCrunchActive ? "Кризис по «" + task.title + "» оставлен как есть." : "Лиса вернулась к кризису по «" + task.title + "».");
+      }
+      if (action === "pushTeam") {
+        spendMental(2);
         changeMetric("teamMood", -3);
-        state.controlPings += 1;
-        addLog(`Лиса уточнила остаток по «${task.title}» и ускорила разработку.`);
+        task.pushCount += 1;
+        state.stats.pushCount += 1;
+        if (task.pushCount > 6 || state.stats.pushCount > 6) activateFlag("overPushed", { task: snapshotTask(task), pushCount: state.stats.pushCount });
+        task.progress = clamp(task.progress + 8, 0, 100);
+        task.worklogs = Math.max(0, task.worklogs - 10);
+        task.ignoredCrunchActive = false;
+        addLog("Лиса пнула команду по «" + task.title + "». Прогресс вырос, но команда недовольна.");
         completeStageIfReady(task);
       }
-
-      if (stage.mode === "testing") {
-        if (task.stageProgress >= 100) {
-          releaseTask(task);
+      if (action === "renegotiate") {
+        task.negotiationCount += 1;
+        state.stats.negotiationCount += 1;
+        if (state.stats.negotiationCount >= 2 || task.negotiationCount >= 2) activateFlag("negotiationAbuse", { task: snapshotTask(task), negotiationCount: state.stats.negotiationCount });
+        if (task.sizeIndex < TASK_SIZES.length - 1) {
+          spendMental(5);
+          changeMetric("clientHappiness", -5);
+          task.sizeIndex += 1;
+          task.size = TASK_SIZES[task.sizeIndex];
+          task.ignoredCrunchActive = false;
+          addLog("Лиса передоговорилась: «" + task.title + "» теперь " + task.size.title.toLowerCase() + " задача.");
         } else {
-          spendMental(stage.mentalCost);
-          state.manualTests += 1;
-          task.stageProgress = clamp(task.stageProgress + stage.clickProgress, 0, 100);
-          addLog(`ПМ тестирует руками: «${task.title}».`);
+          spendMental(10);
+          changeMetric("clientHappiness", -15);
+          task.worklogs = Math.max(0, task.worklogs - 15);
+          task.worklogSlowdownUntil = Date.now() + 7000;
+          task.ignoredCrunchActive = false;
+          addLog("Лиса умоляет о переносе по «" + task.title + "». Клиент раздражен, но график чуть спасен.");
         }
       }
-
+      if (action === "manualTest") {
+        spendMental(1);
+        task.manualTestClicks += 1;
+        state.stats.manualTestClicks += 1;
+        if (state.stats.manualTestClicks > 12 || task.manualTestClicks > 12) activateFlag("selfSacrifice", { task: snapshotTask(task), manualTestClicks: state.stats.manualTestClicks });
+        task.progress = clamp(task.progress + 10, 0, 100);
+        task.worklogs = Math.min(100, Math.max(90, task.worklogs) + 1);
+        task.quality = clamp(80 + task.progress * 0.18, 80, 100);
+        addLog("ПМ тестирует руками: «" + task.title + "».");
+        completeStageIfReady(task);
+      }
+      if (action === "skipTest") {
+        task.progress = 100;
+        task.worklogs = Math.max(task.worklogs, 90);
+        task.quality = 65;
+        task.qaSkipped = true;
+        state.stats.qaSkipCount += 1;
+        if (state.stats.qaSkipCount >= 2) activateFlag("qaSkipper", { task: snapshotTask(task), qaSkipCount: state.stats.qaSkipCount });
+        addLog("Тест по «" + task.title + "» скипнут. Качество просело.");
+        completeStageIfReady(task);
+      }
+      if (action === "release") releaseTask(task);
       maybeTriggerRandomEvent();
       checkGameOver();
       render();
     }
 
+    function assignTaskSize(task) {
+      const index = Math.floor(Math.random() * TASK_SIZES.length);
+      task.sizeIndex = index;
+      task.size = TASK_SIZES[index];
+      debug("task_size_assigned", { task: snapshotTask(task), size: task.size });
+    }
+
     function gameTick() {
       if (state.screen !== "game" || state.isEventActive) return;
-
       let changed = false;
-
-      state.activeTasks.forEach((task) => {
-        const stage = STAGES[task.stageIndex];
-
-        if (stage.mode === "estimation" && task.isStageRunning) {
-          task.stageProgress = clamp(task.stageProgress + stage.progressPerTick, 0, 100);
-          task.worklogs = clamp(task.worklogs + stage.worklogsPerTick, 0, 100);
+      state.activeTasks.forEach(function (task) {
+        if (task.stageIndex === 2 && task.isRunning) {
+          if (!task.size) assignTaskSize(task);
+          const speed = task.size.percentPerHour * 3;
+          task.progress = clamp(task.progress + speed, 0, 100);
+          task.worklogs = Math.min(10, task.progress * 0.1);
           changed = true;
           completeStageIfReady(task);
         }
-
-        if (stage.mode === "development") {
-          task.isStageRunning = true;
-
-          const isLatePhase = task.stageProgress >= 50;
-          const slowdownActive = Date.now() < task.worklogSlowdownUntil;
-          const progressSpeed = stage.progressPerTick * (isLatePhase ? stage.latePhaseProgressMultiplier : 1);
-          const worklogSpeed = stage.worklogsPerTick * (isLatePhase && !slowdownActive ? stage.latePhaseWorklogsMultiplier : 1);
-
-          task.stageProgress = clamp(task.stageProgress + progressSpeed, 0, 100);
-          task.worklogs = clamp(task.worklogs + worklogSpeed, 0, 100);
+        if (task.stageIndex === 4) {
+          const size = task.size || TASK_SIZES[1];
+          const late = task.progress >= 50;
+          const slowdown = Date.now() < task.worklogSlowdownUntil;
+          const progressSpeed = size.percentPerHour * (late ? 0.5 : 1);
+          const worklogSpeed = size.percentPerHour * 0.8 * (late && !slowdown ? 2 : 1);
+          task.progress = clamp(task.progress + progressSpeed, 0, 100);
+          task.worklogs += worklogSpeed;
+          task.quality = clamp(task.progress * 0.8, 0, 80);
           changed = true;
-
-          if (task.worklogs >= 100) {
-            task.worklogs = 45;
-            spendMental(8);
-            changeMetric("teamMood", -3);
-            addLog(`Ворклоги по «${task.title}» переполнились. Лиса тушит пожар.`);
+          if (task.worklogs > 100 && task.ignoredCrunchActive) {
+            changeMetric("mentalResource", -1);
+            changeMetric("teamMood", -1);
+            changeMetric("clientHappiness", -1);
+            if (Date.now() - task.ignoredCrunchStartedAt > 7000) activateFlag("ignoredCrunch", { task: snapshotTask(task) });
           }
-
           completeStageIfReady(task);
         }
       });
-
       if (changed) {
         checkGameOver();
         render();
@@ -1092,67 +1091,58 @@
     }
 
     function completeStageIfReady(task) {
-      if (task.stageProgress < 100 || task.stageIndex >= STAGES.length - 1) return;
+      if (task.progress < 100) return;
+      if (task.stageIndex === 1) moveTaskToStage(task, 2);
+      else if (task.stageIndex === 2) moveTaskToStage(task, 3);
+      else if (task.stageIndex === 3) moveTaskToStage(task, 4);
+      else if (task.stageIndex === 4) {
+        task.worklogs = Math.max(task.worklogs, 90);
+        task.quality = Math.max(task.quality, 80);
+        moveTaskToStage(task, 5);
+      } else if (task.stageIndex === 5) moveTaskToStage(task, 6);
+    }
 
-      task.stageIndex += 1;
-      task.stageProgress = 0;
-      task.worklogs = 0;
-      task.isStageRunning = false;
-      task.worklogSlowdownUntil = 0;
+    function moveTaskToStage(task, stageIndex) {
+      task.stageIndex = stageIndex;
+      task.progress = 0;
+      task.isRunning = stageIndex === 4;
+      task.ignoredCrunchActive = false;
+      task.ignoredCrunchStartedAt = 0;
+      if (stageIndex === 4) task.worklogs = Math.max(task.worklogs, 10);
+      if (stageIndex === 5) task.worklogs = Math.max(task.worklogs, 90);
       changeMetric("clientHappiness", -2);
-      addLog(`«${task.title}»: этап «${STAGES[task.stageIndex].title}». Клиент ждет и нервничает.`);
-
-      if (STAGES[task.stageIndex].mode === "development") {
-        task.isStageRunning = true;
-      }
+      addLog("«" + task.title + "»: этап «" + STAGES[stageIndex].title + "».");
+      debug("stage_changed", { task: snapshotTask(task), newStage: STAGES[stageIndex].title });
     }
 
     function releaseTask(task) {
-      state.activeTasks = state.activeTasks.filter((item) => item.id !== task.id);
-      changeMetric("clientHappiness", 15);
-      changeMetric("teamMood", 3);
-      addLog(`«${task.title}» ушла в релиз. Клиент счастлив.`);
-
-      if (state.activeTasks.length === 0 && state.screen === "game") {
-        completeDay();
+      let releaseType = "failed";
+      if (task.quality >= 90 && task.worklogs <= 100) {
+        releaseType = "perfect";
+        changeMetric("clientHappiness", 20);
+        changeMetric("teamMood", 10);
+        addLog("Идеальный релиз: «" + task.title + "». Клиент и команда довольны.");
+      } else if (task.quality >= 70 && task.quality <= 89 && task.worklogs <= 100) {
+        releaseType = "neutral";
+        changeMetric("teamMood", 5);
+        addLog("Нейтральный релиз: «" + task.title + "». Клиент принял без восторга.");
+      } else {
+        changeMetric("clientHappiness", -25);
+        changeMetric("teamMood", -10);
+        addLog("Провальный релиз: «" + task.title + "». Качество или ворклоги подвели.");
       }
-    }
-
-    function completeDay() {
-      const ending = state.mentalResource >= 30 ? END_SCREENS.success : END_SCREENS.tired;
-
-      stopTimers();
-      state.screen = "final";
-      state.finalStatus = {
-        type: "win",
-        title: ending.title,
-        message: ending.rank,
-        background: ending.background,
-        mentalResource: state.mentalResource,
-        clientHappiness: state.clientHappiness,
-        teamMood: state.teamMood
-      };
-      state.isEventActive = false;
-      state.activeLogEvent = null;
-      elements.eventOverlay.classList.remove("active");
-      elements.sceneWindow.classList.remove("call-active");
-      elements.sceneCharacter.src = "";
-      elements.sceneCharacter.hidden = true;
-      elements.sceneBackground.src = ending.background;
-      elements.analyzeButton.style.display = "";
-      elements.analyzeButton.hidden = false;
-      addLog(ending.rank);
-      showScreen("final");
+      debug("task_released", { releaseType: releaseType, task: snapshotTask(task) });
+      state.activeTasks = state.activeTasks.filter(function (item) { return item.id !== task.id; });
+      updateGreedFlag();
+      if (state.activeTasks.length === 0 && state.screen === "game") completeDay();
     }
 
     function triggerRandomEvent(eventData) {
-      const availableEvents = state.hasHadFullLunch
-        ? randomEvents.filter((event) => event.type !== "lunch")
-        : randomEvents;
+      const availableEvents = randomEvents.filter(function (event) { return !(event.type === "lunch" && state.hasHadFullLunch); });
       const event = eventData || availableEvents[Math.floor(Math.random() * availableEvents.length)];
+      debug("event_started", { title: event.title, type: event.type });
       state.isEventActive = true;
       state.lastEventAt = Date.now();
-
       elements.sceneBackground.src = event.background;
       elements.sceneWindow.classList.add("call-active");
       elements.sceneCharacter.src = event.character || "";
@@ -1161,49 +1151,39 @@
       elements.eventTitle.textContent = event.title;
       elements.eventText.textContent = event.text;
       elements.eventActions.innerHTML = "";
-
-      state.activeLogEvent = null;
-      event.choices.forEach((choice) => {
+      event.choices.forEach(function (choice) {
         const button = document.createElement("button");
         button.className = "retro-button";
         button.textContent = choice.label;
-        button.addEventListener("click", () => resolveEvent(choice));
+        button.addEventListener("click", function () { resolveEvent(choice); });
         elements.eventActions.appendChild(button);
       });
-
       elements.eventOverlay.classList.add("active");
-      addLog(`Созвон: ${event.title}.`);
+      addLog("Событие: " + event.title + ".");
       render();
     }
 
     function resolveEvent(choice) {
-      if (choice.marksFullLunch) {
+      if (choice.fullLunch) {
         state.hasHadFullLunch = true;
+        state.flags.starvation = false;
+        debug("full_lunch_taken", {});
       }
-
-      Object.entries(choice.effects).forEach(([metric, delta]) => changeMetric(metric, delta));
-      closeActiveEvent(choice.log);
-    }
-
-    function resolveLogEvent(choiceIndex) {
-      const event = state.activeLogEvent;
-      if (!event || !event.choices[choiceIndex]) return;
-
-      const choice = event.choices[choiceIndex];
-      if (choice.marksFullLunch) {
-        state.hasHadFullLunch = true;
+      if (choice.laptopLunch) {
+        state.stats.laptopLunches += 1;
+        if (!state.hasHadFullLunch) activateFlag("starvation", { laptopLunches: state.stats.laptopLunches });
       }
-
-      Object.entries(choice.effects).forEach(([metric, delta]) => changeMetric(metric, delta));
+      if (choice.clientFriendly) state.clientFriendlyChoices += 1;
+      debug("event_choice", { label: choice.label, effects: choice.effects, clientFriendly: !!choice.clientFriendly });
+      Object.entries(choice.effects).forEach(function ([metric, delta]) { changeMetric(metric, delta); });
       closeActiveEvent(choice.log);
     }
 
     function closeActiveEvent(logMessage) {
       state.isEventActive = false;
-      state.activeLogEvent = null;
       elements.eventOverlay.classList.remove("active");
       elements.sceneWindow.classList.remove("call-active");
-      elements.sceneBackground.src = SCENE_BACKGROUNDS.office;
+      elements.sceneBackground.src = ASSETS.backgrounds.office;
       elements.sceneCharacter.src = "";
       elements.sceneCharacter.hidden = true;
       elements.sceneHint.textContent = "Офисное утро. Задачи ждут решения.";
@@ -1216,22 +1196,28 @@
     function scheduleRandomEvent() {
       clearTimeout(state.eventTimerId);
       const delay = 25000 + Math.random() * 5000;
-      state.eventTimerId = setTimeout(() => {
-        if (state.screen === "game" && !state.isEventActive) {
-          triggerRandomEvent();
-        }
+      state.eventTimerId = setTimeout(function () {
+        if (state.screen === "game" && !state.isEventActive) triggerRandomEvent();
       }, delay);
     }
 
     function maybeTriggerRandomEvent() {
       if (state.screen !== "game" || state.isEventActive) return;
-
-      const timeSinceLastEvent = Date.now() - state.lastEventAt;
-      if (timeSinceLastEvent < 25000) return;
-
+      if (Date.now() - state.lastEventAt < 25000) return;
       if (Math.random() < 0.01) {
         clearTimeout(state.eventTimerId);
         triggerRandomEvent();
+      }
+    }
+
+    function updateGreedFlag() {
+      if (state.activeTasks.length > 4) activateFlag("greedMode", { activeTasks: state.activeTasks.length });
+    }
+
+    function activateFlag(flagName, data) {
+      if (!state.flags[flagName]) {
+        state.flags[flagName] = true;
+        debug("flag_activated", { flag: flagName, data: data || {} });
       }
     }
 
@@ -1241,52 +1227,100 @@
 
     function changeMetric(metric, delta) {
       state[metric] = clamp(state[metric] + delta, 0, 100);
+      if (state.screen === "game") checkGameOver();
+    }
 
-      if (state.screen === "game") {
-        checkGameOver();
-      }
+    function completeDay() {
+      if (state.clientFriendlyChoices === 0) activateFlag("clientNeglect", { reason: "no_client_friendly_choices" });
+      const ending = state.mentalResource >= 30
+        ? { title: "Секретная концовка", background: ASSETS.endings.success, message: "Ранг: ПМ-Бог 😎👑! Вы закрыли бэклог и сохранили рассудок." }
+        : { title: "День закрыт", background: ASSETS.endings.tired, message: "Ранг: Выживший Лисенок 🦊. Бэклог пуст, но какой ценой?" };
+      showFinal(Object.assign({ type: "win" }, ending));
     }
 
     function checkGameOver() {
-      if (state.screen === "gameOver" || state.screen === "final" || state.screen === "analysis") return;
-
+      if (state.screen === "final" || state.screen === "analysis") return;
       let reason = null;
-
-      if (state.mentalResource <= 0) {
-        reason = "mental";
-      } else if (state.teamMood <= 0) {
-        reason = "team";
-      } else if (state.clientHappiness <= 0) {
-        reason = "client";
-      }
-
+      if (state.mentalResource <= 0) reason = "mental";
+      else if (state.teamMood <= 0) reason = "team";
+      else if (state.clientHappiness <= 0) reason = "client";
       if (!reason) return;
+      if (state.clientFriendlyChoices === 0) activateFlag("clientNeglect", { reason: "no_client_friendly_choices" });
+      const data = {
+        mental: { title: "Вы выгорели", message: "Вы выгорели и уволились", background: ASSETS.endings.mental },
+        team: { title: "Команда ушла в бунт", message: "Команда взбунтовалась, выгорела и саботировала проект. Работать некому!", background: ASSETS.endings.team },
+        client: { title: "Контракт потерян", message: "Клиент в ярости разорвал контракт и засудил компанию!", background: ASSETS.endings.client }
+      }[reason];
+      showFinal(Object.assign({ type: "gameOver", reason: reason }, data));
+    }
 
-      const gameOver = GAME_OVER_SCREENS[reason];
+    function showFinal(finalData) {
       stopTimers();
       state.screen = "final";
-      state.gameOverReason = reason;
-      state.finalStatus = {
-        type: "gameOver",
-        reason,
-        title: gameOver.title,
-        message: gameOver.text,
-        background: gameOver.background,
+      debug("final_reached", { finalData: finalData, snapshot: snapshotState() });
+      state.finalStatus = Object.assign({}, finalData, {
         mentalResource: state.mentalResource,
         clientHappiness: state.clientHappiness,
-        teamMood: state.teamMood
-      };
+        teamMood: state.teamMood,
+        flags: Object.assign({}, state.flags)
+      });
       state.isEventActive = false;
-      state.activeLogEvent = null;
       elements.eventOverlay.classList.remove("active");
       elements.sceneWindow.classList.remove("call-active");
       elements.sceneCharacter.src = "";
       elements.sceneCharacter.hidden = true;
-      elements.sceneBackground.src = gameOver.background;
+      elements.sceneBackground.src = finalData.background;
       elements.analyzeButton.style.display = "";
       elements.analyzeButton.hidden = false;
-      addLog(gameOver.text);
+      elements.downloadLogButton.hidden = true;
+      elements.downloadLogButton.style.display = "";
+      addLog(finalData.message);
       showScreen("final");
+    }
+
+    function showDayAnalysis() {
+      if (!state.finalStatus || state.screen === "analysis") return;
+      state.screen = "analysis";
+      elements.analyzeButton.hidden = true;
+      elements.analyzeButton.style.display = "none";
+      elements.downloadLogButton.style.display = "";
+      elements.downloadLogButton.hidden = false;
+      elements.eventOverlay.classList.remove("active");
+      elements.sceneWindow.classList.remove("call-active");
+      elements.sceneBackground.src = ASSETS.backgrounds.retro;
+      elements.sceneCharacter.src = "";
+      elements.sceneCharacter.hidden = true;
+      state.log = buildDayAnalysis();
+      debug("analysis_opened", { lines: state.log, finalStatus: state.finalStatus });
+      showScreen("analysis");
+      render();
+    }
+
+    function buildDayAnalysis() {
+      const final = state.finalStatus;
+      const flags = final.flags || state.flags;
+      const lines = [
+        "РАЗБОР ОШИБОК ПМА",
+        final.message,
+        "Финальные шкалы: МР — " + final.mentalResource + "%, счастье клиентов — " + final.clientHappiness + "%, настроение команды — " + final.teamMood + "%."
+      ];
+      if (flags.greedMode) lines.push("• Жадность к обязательствам: В бэклоге одновременно было больше 4 задач. Это резко повышает риск потерять контроль над потоком.");
+      if (flags.ignoredCrunch) lines.push("• Игнор кризиса: Вы слишком долго оставляли красные ворклоги как есть. Кризис сам не рассасывается: он ест МР, команду и клиента каждую секунду.");
+      if (flags.overPushed) lines.push("• Перепинали команду: Кнопка 'Пнуть команду' дает быстрый прогресс, но после серии пинков команда перестает верить в процесс.");
+      if (flags.clientNeglect) lines.push("• Клиент был забыт: За день не было ни одного выбора в пользу клиента. Даже хороший внутренний менеджмент не спасает проект без доверия заказчика.");
+      if (flags.negotiationAbuse) lines.push("• Злоупотребление переносами: Переговоры помогают спасать график, но частые переносы выглядят как потеря контроля.");
+      if (flags.qaSkipper) lines.push("• QA-рулетка: Вы скипали тестирование. Это экономит МР, но режет качество и превращает релиз в рискованный бросок кубика.");
+      if (flags.selfSacrifice) lines.push("• Самопожертвование: Вы слишком много тестировали руками. Да, качество выросло, но ПМ не должен быть последней линией QA каждый раз.");
+      if (flags.starvation) lines.push("• Обед за ноутом: Вы выбирали оставаться на связи вместо нормального восстановления. Клиенты довольны, но ресурс ПМа не бесконечен.");
+      if (final.type === "win" && !Object.values(flags).some(Boolean)) {
+        if (state.stats.qaSkipCount === 0 && state.stats.negotiationCount === 0 && state.stats.pushCount === 0 && state.stats.laptopLunches === 0) {
+          lines.push("Идеальный менеджмент! Вы действовали как учебник по Agile!");
+        } else {
+          lines.push("Флаги риска не сработали, но день не был стерильным: были компромиссы без критического порога. Проверьте debug-лог по скипам QA, пингам команды, переносам и обедам за ноутом.");
+        }
+      }
+      if (lines.length === 3) lines.push("• Ярких паттернов не найдено. День прошел без выраженных перекосов, но метрики все равно стоит пересмотреть.");
+      return lines;
     }
 
     function showScreen(screenName) {
@@ -1297,69 +1331,6 @@
       elements.endScreen.classList.toggle("active", false);
       elements.gameScreen.classList.toggle("final-mode", screenName === "final");
       elements.gameScreen.classList.toggle("analysis-mode", screenName === "analysis");
-    }
-
-    function showDayAnalysis() {
-      if (!state.finalStatus) {
-        state.finalStatus = {
-          type: state.activeTasks.length === 0 ? "win" : "gameOver",
-          title: "Финал дня",
-          message: "Финал наступил, но подробный статус не сохранился. Разбор построен по текущим шкалам.",
-          background: elements.sceneBackground.src,
-          mentalResource: state.mentalResource,
-          clientHappiness: state.clientHappiness,
-          teamMood: state.teamMood
-        };
-      }
-
-      state.screen = "analysis";
-      elements.analyzeButton.hidden = true;
-      elements.analyzeButton.style.display = "none";
-      elements.eventOverlay.classList.remove("active");
-      elements.sceneWindow.classList.remove("call-active");
-      elements.sceneBackground.src = SCENE_BACKGROUNDS.retro;
-      elements.sceneCharacter.src = "";
-      elements.sceneCharacter.hidden = true;
-      state.log = buildDayAnalysis();
-      showScreen("analysis");
-      render();
-    }
-
-    function buildDayAnalysis() {
-      const final = state.finalStatus;
-      const lines = [
-        "РАЗБОР ОШИБОК ПМА",
-        final.message,
-        `Финальные шкалы: МР — ${final.mentalResource}%, счастье клиентов — ${final.clientHappiness}%, настроение команды — ${final.teamMood}%.`
-      ];
-
-      if (final.teamMood < 35) {
-        lines.push("• Давление на команду: Вы слишком часто использовали кнопку 'Чё кого?' (-3% настроения за клик). Пинги помогают временно сбить ворклоги и дать буст к прогрессу, но уничтожают лояльность разработчиков. Попробуйте давать им больше свободы.");
-      } else if (final.teamMood >= 70) {
-        lines.push("• Сильный лидер: Вы сохранили отличный климат в команде! Своевременные релизы задач и правильные решения на созвонах уберегли разработчиков от выгорания.");
-      }
-
-      if (final.clientHappiness < 35) {
-        lines.push("• Проблемы с клиентом: Лояльность на дне. Помните, что каждая смена статуса задачи на внутренний этап отнимает у клиента 2% терпения. Не маринуйте задачи на внутренних этапах слишком долго, быстрее ведите их к релизу.");
-      } else if (final.clientHappiness >= 70) {
-        lines.push("• Клиентский сервис: Отлично! Вы быстро двигали задачи в релиз (+15% к счастью) и, возможно, отказались от полноценного обеда ради того, чтобы остаться на связи за ноутом (+3% к счастью).");
-      }
-
-      if (final.mentalResource < 30) {
-        lines.push("• Выгорание близко: Вы истощены. Вероятно, вы тратили слишком много сил на ручное тестирование (этап 4) или проигнорировали полноценный обед, выбрав работу за ноутом. Помните: мертвый ПМ проекту не поможет.");
-      } else if (final.mentalResource >= 70) {
-        lines.push("• Work-Life Balance: Вы мастерски распределили свои силы! Своевременный полноценный обед (+25% МР) вернул вас в строй в критический момент, позволив завершить день со свежей головой.");
-      }
-
-      if (final.type === "win" && state.newTasksAdded > 0) {
-        lines.push("• Повышенные обязательства: Вы добровольно расширили бэклог кнопкой 'Новая задача'. Это был огромный риск завалить весь день, но вы очистили бэклог до конца как настоящий профессионал!");
-      }
-
-      if (lines.length === 3) {
-        lines.push("• Стабильный день: Вы прошли без критических перекосов. Не идеально, но управляемо: именно так часто и выглядит настоящий проектный день.");
-      }
-
-      return lines;
     }
 
     function render() {
@@ -1378,120 +1349,155 @@
 
     function renderTasks() {
       if (state.activeTasks.length === 0) {
-        elements.taskList.innerHTML = `
-          <div class="empty-state">
-            <h2>Поток пуст</h2>
-            <p>Можно выдохнуть или взять новую задачу.</p>
-          </div>
-        `;
+        elements.taskList.innerHTML = '<div class="empty-state"><h2>Поток пуст</h2><p>Можно выдохнуть или взять новую задачу.</p></div>';
         return;
       }
-
       elements.taskList.innerHTML = state.activeTasks.map(createTaskCard).join("");
-      elements.taskList.querySelectorAll("[data-task-action]").forEach((button) => {
-        button.addEventListener("click", () => handleTaskAction(Number(button.dataset.taskAction)));
+      elements.taskList.querySelectorAll("[data-task-action]").forEach(function (button) {
+        button.addEventListener("click", function () { handleTaskAction(Number(button.dataset.taskAction), button.dataset.action); });
       });
     }
 
     function createTaskCard(task) {
-      const stage = STAGES[task.stageIndex];
-      const buttonText = getTaskButtonText(task);
-      const disabled = state.isEventActive || (stage.mode === "estimation" && task.isStageRunning) ? "disabled" : "";
-
-      return `
-        <article class="task-card">
-          <div>
-            <h2 class="task-title">${escapeHtml(task.title)}</h2>
-            <div class="task-stage">${escapeHtml(stage.title)}</div>
-            <div class="task-meters">
-              ${createTaskMeter("Прогресс этапа", task.stageProgress, "progress")}
-              ${createTaskMeter("Ворклоги", task.worklogs, "worklog")}
-            </div>
-          </div>
-          <button class="retro-button task-action" data-task-action="${task.id}" ${disabled}>
-            ${escapeHtml(buttonText)}
-          </button>
-        </article>
-      `;
+      const title = escapeHtml(task.title);
+      const stage = STAGES[task.stageIndex].title;
+      const size = task.size ? task.size.title : "не оценена";
+      const expectedWorklogs = 10 + task.progress * 0.8;
+      const crisis = task.stageIndex === 4 && task.progress >= 50 && task.worklogs > expectedWorklogs + 5;
+      return '<article class="task-card"><div><h2 class="task-title">' + title + '</h2><div class="task-stage">' + escapeHtml(stage) + ' · ' + escapeHtml(size) + '</div><div class="task-meters">' + createTaskMeter("Прогресс", task.progress, "progress") + createTaskMeter("Ворклоги", task.worklogs, "worklog", true) + createTaskMeter("Качество", task.quality, "progress") + '</div></div><div class="task-actions">' + createTaskActions(task, crisis) + '</div></article>';
     }
 
-    function getTaskButtonText(task) {
-      const stage = STAGES[task.stageIndex];
-
-      if (stage.mode === "estimation" && task.isStageRunning) return "Команда думает...";
-      if (stage.mode === "testing" && task.stageProgress >= 100) return stage.releaseButton;
-
-      return stage.button;
+    function createTaskActions(task, crisis) {
+      if (task.stageIndex === 1) return taskButton(task, "requirements", "Обсудить требования");
+      if (task.stageIndex === 2) return taskButton(task, "estimate", task.isRunning ? "Команда оценивает..." : "Оценить", task.isRunning);
+      if (task.stageIndex === 3) return taskButton(task, "budget", "Согласовать бюджет");
+      if (task.stageIndex === 4 && crisis) {
+        const negotiateLabel = task.sizeIndex >= 2 ? "Умолять о переносе" : "Передоговориться";
+        return [taskButton(task, "ignoreCrunch", task.ignoredCrunchActive ? "Хватит игнорить" : "Оставить как есть"), taskButton(task, "pushTeam", "Пнуть команду"), taskButton(task, "renegotiate", negotiateLabel)].join("");
+      }
+      if (task.stageIndex === 4) return '<button class="retro-button task-action" disabled>Разработка идет</button>';
+      if (task.stageIndex === 5) return taskButton(task, "manualTest", "Тестировать руками") + taskButton(task, "skipTest", "Скипнуть тест");
+      if (task.stageIndex === 6) return taskButton(task, "release", "В РЕЛИЗ!");
+      return "";
     }
 
-    function createTaskMeter(label, value, type) {
-      return `
-        <div>
-          <div class="task-meter-label">
-            <span>${label}</span>
-            <span>${value}%</span>
-          </div>
-          <div class="task-meter-track">
-            <div class="task-meter-fill ${type}" style="width: ${value}%"></div>
-          </div>
-        </div>
-      `;
+    function taskButton(task, action, label, disabled) {
+      const isDisabled = disabled || state.isEventActive ? "disabled" : "";
+      return '<button class="retro-button task-action" data-task-action="' + task.id + '" data-action="' + action + '" ' + isDisabled + '>' + escapeHtml(label) + '</button>';
+    }
+
+    function createTaskMeter(label, value, type, canOverflow) {
+      const display = Math.round(value);
+      const width = Math.min(100, Math.max(0, display));
+      const overflow = canOverflow && value > 100;
+      const text = overflow ? display + "% / 100%" : display + "%";
+      const color = overflow ? "background:#ff1e1e;" : "";
+      return '<div><div class="task-meter-label"><span>' + label + '</span><span>' + text + '</span></div><div class="task-meter-track"><div class="task-meter-fill ' + type + '" style="width: ' + width + '%; ' + color + '"></div></div></div>';
     }
 
     function renderScene() {
       if (state.isEventActive || state.screen === "final" || state.screen === "analysis") return;
-
       elements.sceneWindow.classList.remove("call-active");
-      elements.sceneBackground.src = SCENE_BACKGROUNDS.office;
+      elements.sceneBackground.src = ASSETS.backgrounds.office;
       elements.sceneCharacter.src = "";
       elements.sceneCharacter.hidden = true;
-      elements.sceneHint.textContent = state.activeTasks.length
-        ? "Офисное утро. Бэклог слева ждет решений."
-        : "Поток пуст. Можно взять новую задачу.";
+      elements.sceneHint.textContent = state.activeTasks.length ? "Офисное утро. Бэклог слева ждет решений." : "Поток пуст. Можно взять новую задачу.";
     }
 
     function renderPortrait() {
       if (state.screen === "final") return;
-
-      if (state.mentalResource <= 25) {
-      elements.pmPortrait.src = FOX_PORTRAITS.exhausted;
-      return;
-      }
-
-      if (state.isEventActive || state.clientHappiness <= 20) {
-        elements.pmPortrait.src = FOX_PORTRAITS.shocked;
-        return;
-      }
-
-      elements.pmPortrait.src = FOX_PORTRAITS.working;
+      if (state.mentalResource <= 25) elements.pmPortrait.src = ASSETS.characters.foxExhausted;
+      else if (state.isEventActive || state.clientHappiness <= 20) elements.pmPortrait.src = ASSETS.characters.foxShocked;
+      else elements.pmPortrait.src = ASSETS.characters.foxWorking;
     }
 
     function renderLog() {
       const visibleLines = state.screen === "analysis" ? state.log : state.log.slice(-5);
-      const lines = visibleLines
-        .map((line) => `<div class="log-line">${escapeHtml(line)}</div>`)
-        .join("");
+      elements.gameLog.innerHTML = visibleLines.map(function (line) { return '<div class="log-line">' + escapeHtml(line) + '</div>'; }).join("");
+    }
 
-      const actions = state.activeLogEvent
-        ? `<div class="log-actions">${state.activeLogEvent.choices.map((choice, index) => `<button class="retro-button" data-log-choice="${index}">${escapeHtml(choice.label)}</button>`).join("")}</div>`
-        : "";
+    function debug(type, data) {
+      const entry = {
+        time: new Date().toISOString(),
+        type: type,
+        metrics: {
+          mentalResource: state.mentalResource,
+          clientHappiness: state.clientHappiness,
+          teamMood: state.teamMood
+        },
+        flags: Object.assign({}, state.flags),
+        data: data || {}
+      };
+      state.debugLog.push(entry);
+      try {
+        console.log("[PM DEBUG]", type, entry);
+      } catch (error) {}
+    }
 
-      elements.gameLog.innerHTML = lines + actions;
-      elements.gameLog.querySelectorAll("[data-log-choice]").forEach((button) => {
-        button.addEventListener("click", () => resolveLogEvent(Number(button.dataset.logChoice)));
-      });
+    function snapshotState() {
+      return {
+        screen: state.screen,
+        activeTasks: state.activeTasks.map(function (task) { return snapshotTask(task); }),
+        stats: Object.assign({}, state.stats),
+        clientFriendlyChoices: state.clientFriendlyChoices,
+        newTasksAdded: state.newTasksAdded,
+        hasHadFullLunch: state.hasHadFullLunch
+      };
+    }
+
+    function snapshotTask(task) {
+      return {
+        id: task.id,
+        title: task.title,
+        stageIndex: task.stageIndex,
+        stageTitle: STAGES[task.stageIndex] ? STAGES[task.stageIndex].title : "",
+        progress: Math.round(task.progress),
+        worklogs: Math.round(task.worklogs),
+        quality: Math.round(task.quality),
+        size: task.size ? task.size.title : null,
+        ignoredCrunchActive: task.ignoredCrunchActive,
+        pushCount: task.pushCount,
+        negotiationCount: task.negotiationCount,
+        manualTestClicks: task.manualTestClicks,
+        qaSkipped: task.qaSkipped
+      };
+    }
+
+    function downloadDebugLog() {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        finalStatus: state.finalStatus,
+        metrics: {
+          mentalResource: state.mentalResource,
+          clientHappiness: state.clientHappiness,
+          teamMood: state.teamMood
+        },
+        flags: Object.assign({}, state.flags),
+        stats: Object.assign({}, state.stats),
+        activeTasks: state.activeTasks.map(function (task) { return snapshotTask(task); }),
+        debugLog: state.debugLog
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "pm-day-debug-log.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      debug("debug_log_downloaded", { entries: state.debugLog.length });
     }
 
     function addLog(message) {
       state.log.push(message);
-      if (state.log.length > 30) state.log.shift();
+      if (state.log.length > 40) state.log.shift();
     }
-
 
     function setMeter(valueElement, fillElement, value) {
       const safeValue = clamp(value, 0, 100);
-      valueElement.textContent = `${safeValue}%`;
-      fillElement.style.width = `${safeValue}%`;
+      valueElement.textContent = safeValue + "%";
+      fillElement.style.width = safeValue + "%";
     }
 
     function clamp(value, min, max) {
@@ -1499,12 +1505,7 @@
     }
 
     function escapeHtml(value) {
-      return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+      return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
     }
   </script>
 </body>
