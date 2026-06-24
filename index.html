@@ -95,8 +95,10 @@
     .start-panel,
     .game-over-panel {
       position: absolute;
-      left: 58px;
-      bottom: 54px;
+      left: 50%;
+      top: 50%;
+      bottom: auto;
+      transform: translate(-50%, -50%);
       width: 520px;
       padding: 28px;
       background: var(--panel);
@@ -105,11 +107,13 @@
     }
 
     .game-over-panel {
-      left: 50%;
-      top: 50%;
-      bottom: auto;
-      transform: translate(-50%, -50%);
       text-align: center;
+    }
+
+    .start-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
     }
 
     h1,
@@ -587,6 +591,11 @@
       word-break: normal;
     }
 
+    .log-box.tutorial-focus {
+      position: relative;
+      z-index: 20;
+    }
+
     .log-line {
       margin-bottom: 10px;
     }
@@ -613,6 +622,42 @@
 
     .event-overlay.active {
       display: block;
+    }
+
+    .inbox-zero-overlay {
+      position: absolute;
+      z-index: 9;
+      inset: 0;
+      display: none;
+      background: rgba(0, 0, 0, 0.22);
+    }
+
+    .inbox-zero-overlay.active {
+      display: block;
+    }
+
+    .inbox-zero-panel {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(440px, calc(100% - 32px));
+      transform: translate(-50%, -50%);
+      padding: 18px;
+      background: var(--panel);
+      border: 3px solid var(--accent);
+      box-shadow: 7px 7px 0 #030407;
+      text-align: center;
+    }
+
+    .inbox-zero-panel h2 {
+      margin-bottom: 14px;
+      font-size: 24px;
+    }
+
+    .inbox-zero-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
     }
 
     .dialog-panel {
@@ -644,6 +689,31 @@
       gap: 10px;
       flex-wrap: wrap;
     }
+
+    .tutorial-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .tutorial-overlay {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.7);
+      pointer-events: none;
+    }
+
+    .tutorial-ring {
+      position: absolute;
+      border: 3px solid var(--accent);
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.72), 0 0 24px rgba(255, 213, 106, 0.9);
+      pointer-events: none;
+    }
+
+    .tutorial-next {
+      width: 100%;
+      margin-top: 12px;
+    }
   </style>
 </head>
 <body>
@@ -652,7 +722,10 @@
       <div class="start-panel">
         <h1>Симулятор ПМа:<br>В поисках лимитов</h1>
         <p>Один день, один поток задач и одна лиса, которая пытается не сгореть раньше релиза.</p>
-        <button id="startDayButton" class="retro-button">Начать день</button>
+        <div class="start-actions">
+          <button id="startDayButton" class="retro-button">Начать игру</button>
+          <button id="startTutorialButton" class="retro-button">Пройти обучение</button>
+        </div>
       </div>
     </section>
 
@@ -711,6 +784,15 @@
                 <div id="eventActions" class="dialog-actions"></div>
               </div>
             </div>
+            <div id="inboxZeroOverlay" class="inbox-zero-overlay" aria-modal="true" role="dialog">
+              <div class="inbox-zero-panel">
+                <h2>У вас закончились задачи</h2>
+                <div class="inbox-zero-actions">
+                  <button id="finishDayButton" class="retro-button" type="button">Завершить день</button>
+                  <button id="takeNewTaskButton" class="retro-button" type="button">Взять новую задачу</button>
+                </div>
+              </div>
+            </div>
 
           </div>
         </section>
@@ -722,6 +804,14 @@
           </div>
           <div id="gameLog" class="log-box" aria-live="polite"></div>
         </aside>
+      </div>
+
+      <div id="tutorialLayer" class="tutorial-layer" hidden>
+        <div class="tutorial-overlay" data-mask="top"></div>
+        <div class="tutorial-overlay" data-mask="right"></div>
+        <div class="tutorial-overlay" data-mask="bottom"></div>
+        <div class="tutorial-overlay" data-mask="left"></div>
+        <div class="tutorial-ring" data-mask="ring"></div>
       </div>
 
     </section>
@@ -819,6 +909,70 @@
       }
     ];
 
+    const tutorialSteps = [
+      null,
+      {
+        target: "mental",
+        text: "Это твое здоровье и рассудок (МР). Тратится на ручную работу, тяжелые переговоры и контроль команды. Не допускай падения до 0%.",
+        button: "Далее"
+      },
+      {
+        target: "client",
+        text: "Лояльность заказчика. Падает, когда задачи долго висят без релиза или когда ты просишь перенос сроков. Растет, когда задачи успешно уходят в релиз. Не допускай падения до 0%.",
+        button: "Далее"
+      },
+      {
+        target: "team",
+        text: "Дух твоих разработчиков. Падает от жесткого микроменеджмента и давления, растет от успешных релизов и помощи на созвонах. Не допускай падения до 0%.",
+        button: "Далее"
+      },
+      {
+        target: "scene",
+        text: "Центральный экран — твое рабочее место. Здесь будут всплывать созвоны с командой, требования руководства и Время Обеда, где можно восстановить силы. Каждый выбор меняет шкалы.",
+        button: "Далее"
+      },
+      {
+        target: "fox",
+        text: "Лиса здесь для красоты и визуального отображения твоего текущего состояния. Следи за ее эмоциями!",
+        button: "Далее"
+      },
+      {
+        target: "newTask",
+        text: "Кнопка 'Новая задача' добавляет работу в бэклог. Помни правило нулевого входящего: игра не закончится, пока бэклог не станет абсолютно пустым!",
+        button: "Далее"
+      },
+      {
+        target: "task",
+        text: "Кликай на кнопку 'Обсудить требования', чтобы довести прогресс до 100%. Это тратит твое МР."
+      },
+      {
+        target: "task",
+        text: "Нажми 'Отдать на оценку'. Команда сама определит размер задачи (Маленькая, Средняя или Большая). От этого размера зависит скорость заполнения шкал. Ворклоги займут первые 10% бюджета времени."
+      },
+      {
+        target: "task",
+        text: "Нажми 'Утвердить бюджет', чтобы клиент подписал смету. Это действие тратит твое МР."
+      },
+      {
+        target: "task",
+        text: "В разработке прогресс идет сам. Но после 50% наступит парадокс: прогресс замедлится, а ворклоги ускорятся. Если ворклоги уйдут за 100% (красная зона), у тебя будет 7 секунд на принятие решений кризисными кнопками.",
+        button: "Далее"
+      },
+      {
+        target: "task",
+        text: "Выбирай режим проверки кода перед сдачей:\n1. 'Тестировать руками' — тратит МР, немного поднимает качество и сразу открывает кнопку 'В РЕЛИЗ!', чтобы ты сама решила, готова ли задача.\n2. 'Скипнуть тест' — мгновенный переход к релизу, МР не тратится, но качество падает до 65%.\n3. 'Отдать тестировщику' — МР не тратится, но добавляет +15 к ворклогам. Зато качество гарантированно вырастет до 100%."
+      },
+      {
+        target: "task",
+        text: "Финал работы: Жми 'В РЕЛИЗ!'. Клиент оценит результат. Если качество высокое, а ворклоги в норме — все получат бонусы. Если качество низкое или сроки сорваны — шкалы сильно упадут."
+      },
+      {
+        target: null,
+        text: "ГЛАВНОЕ ПРАВИЛО: Если любая шкала дойдет до 0% — ты мгновенно проиграла. Удерживай все параметры на плаву, балансируй между задачами и отдыхом, и полностью очисти бэклог! Удачи, ПМ!",
+        button: "ПОГНАЛИ!"
+      }
+    ];
+
     const state = {
       screen: "start",
       mentalResource: 100,
@@ -833,11 +987,17 @@
       debugLog: [],
       lastEventAt: 0,
       finalStatus: null,
+      awaitingDayEnd: false,
       hasHadFullLunch: false,
       clientFriendlyChoices: 0,
       newTasksAdded: 0,
       flags: {},
-      stats: {}
+      stats: {},
+      tutorial: {
+        active: false,
+        step: 0,
+        taskCreated: false
+      }
     };
 
     const elements = {
@@ -846,6 +1006,7 @@
       gameOverScreen: document.querySelector("#gameOverScreen"),
       endScreen: document.querySelector("#endScreen"),
       startDayButton: document.querySelector("#startDayButton"),
+      startTutorialButton: document.querySelector("#startTutorialButton"),
       restartButton: document.querySelector("#restartButton"),
       endRestartButton: document.querySelector("#endRestartButton"),
       addTaskButton: document.querySelector("#addTaskButton"),
@@ -867,14 +1028,22 @@
       eventOverlay: document.querySelector("#eventOverlay"),
       eventTitle: document.querySelector("#eventTitle"),
       eventText: document.querySelector("#eventText"),
-      eventActions: document.querySelector("#eventActions")
+      eventActions: document.querySelector("#eventActions"),
+      inboxZeroOverlay: document.querySelector("#inboxZeroOverlay"),
+      finishDayButton: document.querySelector("#finishDayButton"),
+      takeNewTaskButton: document.querySelector("#takeNewTaskButton"),
+      tutorialLayer: document.querySelector("#tutorialLayer")
     };
 
     elements.startDayButton.addEventListener("click", startDay);
+    elements.startTutorialButton.addEventListener("click", startTutorial);
     elements.restartButton.addEventListener("click", startDay);
     elements.endRestartButton.addEventListener("click", startDay);
+    elements.finishDayButton.addEventListener("click", finishDayFromInboxZero);
+    elements.takeNewTaskButton.addEventListener("click", takeNewTaskFromInboxZero);
     // Кнопка анализа использует inline onclick, чтобы локальный file:// запуск был максимально надежным.
     elements.addTaskButton.addEventListener("click", function () {
+      if (state.tutorial.active) return;
       if (state.isEventActive || state.screen !== "game") return;
       state.newTasksAdded += 1;
       addTask();
@@ -903,6 +1072,9 @@
     function startDay() {
       stopTimers();
       state.screen = "game";
+      state.tutorial.active = false;
+      state.tutorial.step = 0;
+      state.tutorial.taskCreated = false;
       state.mentalResource = 100;
       state.clientHappiness = 50;
       state.teamMood = 50;
@@ -911,6 +1083,7 @@
       state.isEventActive = false;
       state.lastEventAt = Date.now();
       state.finalStatus = null;
+      state.awaitingDayEnd = false;
       state.hasHadFullLunch = false;
       state.clientFriendlyChoices = 0;
       state.newTasksAdded = 0;
@@ -918,6 +1091,9 @@
       state.debugLog = [];
       resetFlags();
       elements.gameScreen.classList.remove("final-mode", "analysis-mode");
+      elements.tutorialLayer.hidden = true;
+      elements.gameLog.classList.remove("tutorial-focus");
+      elements.inboxZeroOverlay.classList.remove("active");
       elements.analyzeButton.hidden = true;
       elements.analyzeButton.style.display = "";
       elements.downloadLogButton.hidden = true;
@@ -935,6 +1111,43 @@
       render();
     }
 
+    function startTutorial() {
+      stopTimers();
+      state.screen = "game";
+      state.tutorial.active = true;
+      state.tutorial.step = 1;
+      state.tutorial.taskCreated = false;
+      state.mentalResource = 100;
+      state.clientHappiness = 50;
+      state.teamMood = 50;
+      state.nextTaskId = 1;
+      state.activeTasks = [];
+      state.isEventActive = false;
+      state.lastEventAt = Date.now();
+      state.finalStatus = null;
+      state.awaitingDayEnd = false;
+      state.hasHadFullLunch = false;
+      state.clientFriendlyChoices = 0;
+      state.newTasksAdded = 0;
+      state.log = [];
+      state.debugLog = [];
+      resetFlags();
+      elements.gameScreen.classList.remove("final-mode", "analysis-mode");
+      elements.tutorialLayer.hidden = false;
+      elements.gameLog.classList.add("tutorial-focus");
+      elements.inboxZeroOverlay.classList.remove("active");
+      elements.analyzeButton.hidden = true;
+      elements.analyzeButton.style.display = "";
+      elements.downloadLogButton.hidden = true;
+      elements.downloadLogButton.style.display = "";
+      elements.pmPortrait.src = ASSETS.characters.foxWorking;
+      elements.sceneBackground.src = ASSETS.backgrounds.office;
+      elements.sceneHint.textContent = "Обучение ПМа.";
+      debug("tutorial_start", snapshotState());
+      showScreen("game");
+      render();
+    }
+
     function stopTimers() {
       clearInterval(state.tickTimerId);
       clearTimeout(state.eventTimerId);
@@ -946,7 +1159,7 @@
       const taskId = state.nextTaskId++;
       const task = {
         id: taskId,
-        title: title || "Задача " + taskId,
+        title: title || "Задача №" + taskId,
         stageIndex: 1,
         progress: 0,
         worklogs: 0,
@@ -959,6 +1172,7 @@
         pushCount: 0,
         negotiationCount: 0,
         manualTestClicks: 0,
+        manualTestStarted: false,
         qaSkipped: false,
         worklogSlowdownUntil: 0
       };
@@ -972,6 +1186,7 @@
       if (state.isEventActive || state.screen !== "game") return;
       const task = state.activeTasks.find(function (item) { return item.id === taskId; });
       if (!task) return;
+      if (state.tutorial.active && !isTutorialActionAllowed(action)) return;
       debug("task_action", { action: action, before: snapshotTask(task) });
       if (action === "requirements") {
         spendMental(1);
@@ -1030,13 +1245,13 @@
       if (action === "manualTest") {
         spendMental(1);
         task.manualTestClicks += 1;
+        task.manualTestStarted = true;
         state.stats.manualTestClicks += 1;
         if (state.stats.manualTestClicks > 12 || task.manualTestClicks > 12) activateFlag("selfSacrifice", { task: snapshotTask(task), manualTestClicks: state.stats.manualTestClicks });
         task.progress = clamp(task.progress + 10, 0, 100);
         task.worklogs = Math.min(100, task.worklogs + 1);
-        task.quality = clamp(80 + task.progress * 0.18, 80, 100);
-        addLog("ПМ тестирует руками: «" + task.title + "».");
-        completeStageIfReady(task);
+        task.quality = clamp(80 + task.progress * 0.2, 80, 100);
+        addLog("ПМ проверил «" + task.title + "» руками. Теперь можно решать: релизить или нет.");
       }
       if (action === "skipTest") {
         task.progress = 100;
@@ -1057,6 +1272,11 @@
         completeStageIfReady(task);
       }
       if (action === "release") releaseTask(task);
+      if (state.tutorial.active) {
+        handleTutorialAction(action, task);
+        render();
+        return;
+      }
       maybeTriggerRandomEvent();
       checkGameOver();
       render();
@@ -1148,7 +1368,41 @@
       debug("task_released", { releaseType: releaseType, task: snapshotTask(task) });
       state.activeTasks = state.activeTasks.filter(function (item) { return item.id !== task.id; });
       updateGreedFlag();
-      if (state.activeTasks.length === 0 && state.screen === "game") completeDay();
+      if (!state.tutorial.active && state.activeTasks.length === 0 && state.screen === "game") showInboxZeroChoice();
+    }
+
+    function showInboxZeroChoice() {
+      state.awaitingDayEnd = true;
+      state.isEventActive = true;
+      clearTimeout(state.eventTimerId);
+      elements.sceneBackground.src = ASSETS.backgrounds.office;
+      elements.sceneCharacter.src = "";
+      elements.sceneCharacter.hidden = true;
+      elements.sceneHint.textContent = "Бэклог пуст. Можно завершить день или взять новую работу.";
+      elements.inboxZeroOverlay.classList.add("active");
+      addLog("Бэклог пуст. Решите: завершить день или взять новую задачу.");
+      debug("inbox_zero_choice", snapshotState());
+    }
+
+    function finishDayFromInboxZero() {
+      if (!state.awaitingDayEnd) return;
+      state.awaitingDayEnd = false;
+      state.isEventActive = false;
+      elements.inboxZeroOverlay.classList.remove("active");
+      completeDay();
+    }
+
+    function takeNewTaskFromInboxZero() {
+      if (!state.awaitingDayEnd) return;
+      state.awaitingDayEnd = false;
+      state.isEventActive = false;
+      elements.inboxZeroOverlay.classList.remove("active");
+      state.newTasksAdded += 1;
+      addTask();
+      addLog("Лиса взяла новую задачу вместо завершения дня.");
+      debug("inbox_zero_new_task", snapshotState());
+      scheduleRandomEvent();
+      render();
     }
 
     function triggerRandomEvent(eventData) {
@@ -1279,7 +1533,11 @@
         flags: Object.assign({}, state.flags)
       });
       state.isEventActive = false;
+      state.awaitingDayEnd = false;
       elements.eventOverlay.classList.remove("active");
+      elements.inboxZeroOverlay.classList.remove("active");
+      elements.tutorialLayer.hidden = true;
+      elements.gameLog.classList.remove("tutorial-focus");
       elements.sceneWindow.classList.remove("call-active");
       elements.sceneCharacter.src = "";
       elements.sceneCharacter.hidden = true;
@@ -1300,6 +1558,7 @@
       elements.downloadLogButton.style.display = "";
       elements.downloadLogButton.hidden = false;
       elements.eventOverlay.classList.remove("active");
+      elements.inboxZeroOverlay.classList.remove("active");
       elements.sceneWindow.classList.remove("call-active");
       elements.sceneBackground.src = ASSETS.backgrounds.retro;
       elements.sceneCharacter.src = "";
@@ -1348,6 +1607,134 @@
       elements.gameScreen.classList.toggle("analysis-mode", screenName === "analysis");
     }
 
+    function nextTutorialStep() {
+      if (!state.tutorial.active) return;
+      if (state.tutorial.step === 6 && !state.tutorial.taskCreated) {
+        state.activeTasks = [];
+        state.nextTaskId = 1;
+        addTask();
+        state.tutorial.taskCreated = true;
+      } else if (state.tutorial.step === 10) {
+        const task = state.activeTasks[0];
+        if (task) {
+          task.stageIndex = 4;
+          task.progress = 100;
+          task.quality = 80;
+          completeStageIfReady(task);
+        }
+      } else if (state.tutorial.step === 13) {
+        startDay();
+        return;
+      }
+      state.tutorial.step += 1;
+      debug("tutorial_step", { step: state.tutorial.step });
+      render();
+    }
+
+    function isTutorialActionAllowed(action) {
+      if (!state.tutorial.active) return true;
+      if (state.tutorial.step === 7) return action === "requirements";
+      if (state.tutorial.step === 8) return action === "estimate";
+      if (state.tutorial.step === 9) return action === "budget";
+      if (state.tutorial.step === 11) return ["manualTest", "skipTest", "delegateTest"].includes(action);
+      if (state.tutorial.step === 12) return action === "release";
+      return false;
+    }
+
+    function handleTutorialAction(action, task) {
+      if (!state.tutorial.active) return;
+      if (state.tutorial.step === 7 && task.stageIndex >= 2) {
+        state.tutorial.step = 8;
+      } else if (state.tutorial.step === 8 && action === "estimate") {
+        if (!task.size) assignTaskSize(task);
+        task.progress = 100;
+        task.worklogs = 10;
+        completeStageIfReady(task);
+        state.tutorial.step = 9;
+      } else if (state.tutorial.step === 9 && action === "budget") {
+        task.progress = 100;
+        completeStageIfReady(task);
+        state.tutorial.step = 10;
+      } else if (state.tutorial.step === 11 && ["manualTest", "skipTest", "delegateTest"].includes(action)) {
+        if (task.stageIndex === 5) {
+          if (action === "manualTest") {
+            task.manualTestStarted = true;
+          } else {
+            task.progress = 100;
+            task.quality = action === "skipTest" ? 65 : 100;
+            completeStageIfReady(task);
+          }
+        }
+        state.tutorial.step = 12;
+      } else if (state.tutorial.step === 12 && action === "release") {
+        state.tutorial.step = 13;
+      }
+      debug("tutorial_action", { action: action, step: state.tutorial.step, task: snapshotTask(task) });
+    }
+
+    function renderTutorialLog() {
+      elements.gameLog.classList.add("tutorial-focus");
+      const step = tutorialSteps[state.tutorial.step];
+      if (!step) return;
+      const safeText = escapeHtml(step.text).replace(/\n/g, "<br>");
+      const buttonHtml = step.button ? '<button id="tutorialNextButton" class="retro-button tutorial-next">' + escapeHtml(step.button) + '</button>' : "";
+      elements.gameLog.innerHTML = '<div class="log-line">' + safeText + '</div>' + buttonHtml;
+      const nextButton = document.querySelector("#tutorialNextButton");
+      if (nextButton) nextButton.addEventListener("click", nextTutorialStep);
+      setTimeout(updateTutorialSpotlight, 0);
+    }
+
+    function updateTutorialSpotlight() {
+      if (!state.tutorial.active) {
+        elements.tutorialLayer.hidden = true;
+        return;
+      }
+      elements.tutorialLayer.hidden = false;
+      const step = tutorialSteps[state.tutorial.step];
+      const target = step ? getTutorialTarget(step.target) : null;
+      setTutorialSpotlight(target);
+    }
+
+    function getTutorialTarget(targetName) {
+      if (targetName === "mental") return elements.mentalValue.closest(".meter");
+      if (targetName === "client") return elements.clientValue.closest(".meter");
+      if (targetName === "team") return elements.teamValue.closest(".meter");
+      if (targetName === "scene") return elements.sceneWindow;
+      if (targetName === "fox") return elements.pmPortrait.closest(".fox-box");
+      if (targetName === "newTask") return elements.addTaskButton;
+      if (targetName === "task") return elements.taskList.querySelector(".task-card") || elements.taskList;
+      return null;
+    }
+
+    function setTutorialSpotlight(target) {
+      const layer = elements.tutorialLayer;
+      const top = layer.querySelector('[data-mask="top"]');
+      const right = layer.querySelector('[data-mask="right"]');
+      const bottom = layer.querySelector('[data-mask="bottom"]');
+      const left = layer.querySelector('[data-mask="left"]');
+      const ring = layer.querySelector('[data-mask="ring"]');
+      const bounds = elements.gameScreen.getBoundingClientRect();
+      if (!target) {
+        top.style.cssText = "display:block;left:0;top:0;width:100%;height:100%;";
+        top.style.clipPath = "";
+        right.style.cssText = bottom.style.cssText = left.style.cssText = "display:none;";
+        ring.style.cssText = "display:none;";
+        return;
+      }
+      const rect = target.getBoundingClientRect();
+      const pad = 6;
+      const x = Math.max(0, rect.left - bounds.left - pad);
+      const y = Math.max(0, rect.top - bounds.top - pad);
+      const width = Math.min(bounds.width - x, rect.width + pad * 2);
+      const height = Math.min(bounds.height - y, rect.height + pad * 2);
+      top.style.cssText = "display:block;left:0;top:0;width:100%;height:" + y + "px;";
+      top.style.clipPath = "";
+      right.style.cssText = "display:block;left:" + (x + width) + "px;top:" + y + "px;width:" + Math.max(0, bounds.width - x - width) + "px;height:" + height + "px;";
+      bottom.style.cssText = "display:block;left:0;top:" + (y + height) + "px;width:100%;height:" + Math.max(0, bounds.height - y - height) + "px;";
+      left.style.cssText = "display:block;left:0;top:" + y + "px;width:" + x + "px;height:" + height + "px;";
+      ring.style.cssText = "display:block;left:" + x + "px;top:" + y + "px;width:" + width + "px;height:" + height + "px;";
+    }
+
     function render() {
       renderHud();
       renderTasks();
@@ -1384,20 +1771,22 @@
 
     function createTaskActions(task, crisis) {
       if (task.stageIndex === 1) return taskButton(task, "requirements", "Обсудить требования");
-      if (task.stageIndex === 2) return taskButton(task, "estimate", task.isRunning ? "Команда оценивает..." : "Оценить", task.isRunning);
-      if (task.stageIndex === 3) return taskButton(task, "budget", "Согласовать бюджет");
+      if (task.stageIndex === 2) return taskButton(task, "estimate", task.isRunning ? "Команда оценивает..." : "Отдать на оценку", task.isRunning);
+      if (task.stageIndex === 3) return taskButton(task, "budget", "Утвердить бюджет");
       if (task.stageIndex === 4 && crisis) {
         const negotiateLabel = task.sizeIndex >= 2 ? "Умолять о переносе" : "Передоговориться";
         return [taskButton(task, "ignoreCrunch", task.ignoredCrunchActive ? "Хватит игнорить" : "Оставить как есть"), taskButton(task, "pushTeam", "Пнуть команду"), taskButton(task, "renegotiate", negotiateLabel)].join("");
       }
       if (task.stageIndex === 4) return '<button class="retro-button task-action" disabled>Разработка идет</button>';
+      if (task.stageIndex === 5 && task.manualTestStarted && task.quality < 100) return taskButton(task, "manualTest", "Тестировать руками") + taskButton(task, "release", "В РЕЛИЗ!");
+      if (task.stageIndex === 5 && task.manualTestStarted) return taskButton(task, "release", "В РЕЛИЗ!");
       if (task.stageIndex === 5) return taskButton(task, "manualTest", "Тестировать руками") + taskButton(task, "delegateTest", "Отдать тестировщику") + taskButton(task, "skipTest", "Скипнуть тест");
       if (task.stageIndex === 6) return taskButton(task, "release", "В РЕЛИЗ!");
       return "";
     }
 
     function taskButton(task, action, label, disabled) {
-      const isDisabled = disabled || state.isEventActive ? "disabled" : "";
+      const isDisabled = disabled || state.isEventActive || (state.tutorial.active && !isTutorialActionAllowed(action)) ? "disabled" : "";
       return '<button class="retro-button task-action" data-task-action="' + task.id + '" data-action="' + action + '" ' + isDisabled + '>' + escapeHtml(label) + '</button>';
     }
 
@@ -1427,6 +1816,10 @@
     }
 
     function renderLog() {
+      if (state.tutorial.active) {
+        renderTutorialLog();
+        return;
+      }
       const visibleLines = state.screen === "analysis" ? state.log : state.log.slice(-5);
       elements.gameLog.innerHTML = visibleLines.map(function (line) { return '<div class="log-line">' + escapeHtml(line) + '</div>'; }).join("");
     }
@@ -1474,6 +1867,7 @@
         pushCount: task.pushCount,
         negotiationCount: task.negotiationCount,
         manualTestClicks: task.manualTestClicks,
+        manualTestStarted: task.manualTestStarted,
         qaSkipped: task.qaSkipped
       };
     }
